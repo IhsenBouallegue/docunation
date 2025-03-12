@@ -95,6 +95,7 @@ const fetchWeather = new Step({
       maxTemp: data.daily.temperature_2m_max[index],
       minTemp: data.daily.temperature_2m_min[index],
       precipitationChance: data.daily.precipitation_probability_mean[index],
+      // biome-ignore lint/style/noNonNullAssertion: <explanation>
       condition: getWeatherCondition(data.daily.weathercode[index]!),
       location: name,
     }));
