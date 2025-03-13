@@ -95,7 +95,7 @@ This is an **experimental proof-of-concept** rather than a production tool. We'l
 - Forms are filled out with information from documents
 
 ## Phase 5: Basic Integration
- 
+
 **Goal**: Connect all components into a simple working POC.
 
 ### Steps:
