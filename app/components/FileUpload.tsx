@@ -84,12 +84,15 @@ export default function FileUpload() {
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
+    <Card className="w-full h-full">
       <CardHeader>
-        <CardTitle>Upload Documents</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-xl">
+          <FileText className="w-5 h-5" />
+          Document Upload
+        </CardTitle>
         <CardDescription>Upload your documents to process them with AI</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         <UploadDropzone
           endpoint="documentUploader"
           onClientUploadComplete={onUploadComplete}
@@ -103,23 +106,28 @@ export default function FileUpload() {
         {files.length > 0 && (
           <div className="space-y-4">
             <div className="space-y-2">
-              <h3 className="text-sm font-medium">Uploaded Files:</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium">Uploaded Files</h3>
+                <span className="text-xs text-muted-foreground">
+                  {files.length} file{files.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
                 {files.map((file, index) => (
                   <div
                     key={`${file.name}-${index}`}
-                    className="relative group rounded-lg border p-3 hover:bg-secondary/50 transition-colors"
+                    className="relative group rounded-lg border bg-card hover:bg-accent/50 transition-colors"
                   >
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-background border opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute -right-2 -top-2 h-6 w-6 rounded-full bg-background border opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={() => removeFile(index)}
                       disabled={isProcessing}
                     >
                       <X className="h-4 w-4" />
                     </Button>
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3 p-3">
                       {file.type.includes("image") ? (
                         <img src={file.url} alt={file.name} className="h-12 w-12 object-cover rounded" />
                       ) : (
@@ -138,16 +146,22 @@ export default function FileUpload() {
             </div>
 
             <Button className="w-full" onClick={handleProcessFiles} disabled={isProcessing}>
-              {isProcessing ? "Processing..." : "Process Files"}
+              {isProcessing ? (
+                <>
+                  <span className="animate-pulse">Processing...</span>
+                </>
+              ) : (
+                "Process Files"
+              )}
             </Button>
           </div>
         )}
 
         {processedCount > 0 && !files.length && (
-          <div className="mt-4 p-4 bg-secondary/20 rounded">
-            <p className="text-sm text-center text-muted-foreground">
-              Successfully processed {processedCount} document{processedCount !== 1 ? "s" : ""}. The documents are now
-              ready for querying.
+          <div className="rounded-lg bg-primary/10 p-4">
+            <p className="text-sm text-center text-primary">
+              Successfully processed {processedCount} document{processedCount !== 1 ? "s" : ""}. Your documents are
+              ready for applications.
             </p>
           </div>
         )}

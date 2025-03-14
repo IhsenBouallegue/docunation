@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MessageSquare } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -15,6 +16,12 @@ interface Message {
   role: "user" | "assistant";
   timestamp: Date;
   sources?: string[];
+  action?: {
+    type: "application_start" | "document_request" | "info_collection" | "application_review";
+    applicationId?: string;
+    requiredDocs?: string[];
+    personalInfo?: string[];
+  };
 }
 
 export default function Chat() {
@@ -62,13 +69,53 @@ export default function Chat() {
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardHeader>
-        <CardTitle>Chat with Your Documents</CardTitle>
-        <CardDescription>Ask questions about your uploaded documents</CardDescription>
+    <Card className="w-full h-full">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-xl flex items-center gap-2">
+          <MessageSquare className="w-5 h-5" />
+          Digital Twin
+        </CardTitle>
+        <CardDescription>
+          I'm your digital replica. I understand your documents and can handle applications just like you would.
+        </CardDescription>
       </CardHeader>
-      <CardContent>
-        <ScrollArea className="h-[500px] pr-4">
+      <CardContent className="grid gap-4">
+        <ScrollArea className="h-[600px] pr-4">
+          {messages.length === 0 && (
+            <div className="text-center text-muted-foreground p-8">
+              <p className="mb-2">👋 Hi! I'm your Digital Twin. I've learned about you from your documents.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-w-md mx-auto mt-4">
+                <Button
+                  variant="outline"
+                  className="text-sm"
+                  onClick={() => setInput("What personal information have you learned about me?")}
+                >
+                  View My Profile
+                </Button>
+                <Button
+                  variant="outline"
+                  className="text-sm"
+                  onClick={() => setInput("What applications can you submit on my behalf?")}
+                >
+                  Available Applications
+                </Button>
+                <Button
+                  variant="outline"
+                  className="text-sm"
+                  onClick={() => setInput("Can you help me apply for a visa using my existing documents?")}
+                >
+                  Start Visa Application
+                </Button>
+                <Button
+                  variant="outline"
+                  className="text-sm"
+                  onClick={() => setInput("What additional documents do you need from me?")}
+                >
+                  Required Documents
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="flex flex-col gap-4">
             {messages.map((message) => (
               <div
@@ -76,7 +123,7 @@ export default function Chat() {
                 className={`flex gap-3 ${message.role === "assistant" ? "flex-row" : "flex-row-reverse"}`}
               >
                 <Avatar className="h-8 w-8">
-                  <AvatarFallback>{message.role === "assistant" ? "AI" : "You"}</AvatarFallback>
+                  <AvatarFallback>{message.role === "assistant" ? "Twin" : "You"}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col gap-2 max-w-[80%]">
                   <div
@@ -89,12 +136,38 @@ export default function Chat() {
                   </div>
                   {message.sources && message.sources.length > 0 && (
                     <div className="text-xs text-muted-foreground px-4">
-                      <p className="font-medium">Sources:</p>
+                      <p className="font-medium">Found in:</p>
                       <ul className="list-disc list-inside">
                         {message.sources.map((source) => (
-                          <li key={source}>{source}</li>
+                          <li key={`${message.id}-${source}`} className="truncate">
+                            {source}
+                          </li>
                         ))}
                       </ul>
+                    </div>
+                  )}
+                  {message.action && (
+                    <div className="flex flex-wrap gap-2 px-4">
+                      {message.action.type === "application_start" && (
+                        <Button size="sm" variant="secondary">
+                          Continue Application
+                        </Button>
+                      )}
+                      {message.action.type === "document_request" && (
+                        <Button size="sm" variant="secondary">
+                          Upload Missing Documents
+                        </Button>
+                      )}
+                      {message.action.type === "info_collection" && (
+                        <Button size="sm" variant="secondary">
+                          Review Information
+                        </Button>
+                      )}
+                      {message.action.type === "application_review" && (
+                        <Button size="sm" variant="secondary">
+                          Review Before Submission
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -103,26 +176,39 @@ export default function Chat() {
             {isLoading && (
               <div className="flex gap-3">
                 <Avatar className="h-8 w-8">
-                  <AvatarFallback>AI</AvatarFallback>
+                  <AvatarFallback>Twin</AvatarFallback>
                 </Avatar>
                 <div className="bg-secondary rounded-lg px-4 py-2 max-w-[80%]">
-                  <p className="text-sm">Thinking...</p>
+                  <div className="flex gap-1">
+                    <span
+                      className="w-1.5 h-1.5 bg-foreground/50 rounded-full animate-bounce"
+                      style={{ animationDelay: "0ms" }}
+                    />
+                    <span
+                      className="w-1.5 h-1.5 bg-foreground/50 rounded-full animate-bounce"
+                      style={{ animationDelay: "150ms" }}
+                    />
+                    <span
+                      className="w-1.5 h-1.5 bg-foreground/50 rounded-full animate-bounce"
+                      style={{ animationDelay: "300ms" }}
+                    />
+                  </div>
                 </div>
               </div>
             )}
           </div>
         </ScrollArea>
 
-        <form onSubmit={handleSubmit} className="mt-4 flex gap-2">
+        <form onSubmit={handleSubmit} className="flex gap-2">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question about your documents..."
+            placeholder="Tell me what you need help with..."
             className="flex-1"
             disabled={isLoading}
           />
           <Button type="submit" disabled={!input.trim() || isLoading}>
-            {isLoading ? "Sending..." : "Send"}
+            {isLoading ? "Thinking..." : "Send"}
           </Button>
         </form>
       </CardContent>
