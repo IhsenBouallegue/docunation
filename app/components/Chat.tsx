@@ -1,27 +1,18 @@
 "use client";
 
-import { queryDocuments } from "@/app/actions/query-documents";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { type DocumentAnalysis, analyzeDocument } from "@/app/actions/analyze-document";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageSquare } from "lucide-react";
+import { Bot, Send, User } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 interface Message {
-  id: string;
-  content: string;
   role: "user" | "assistant";
-  timestamp: Date;
+  content: string;
   sources?: string[];
-  action?: {
-    type: "application_start" | "document_request" | "info_collection" | "application_review";
-    applicationId?: string;
-    requiredDocs?: string[];
-    personalInfo?: string[];
-  };
 }
 
 export default function Chat() {
@@ -34,10 +25,8 @@ export default function Chat() {
     if (!input.trim() || isLoading) return;
 
     const userMessage: Message = {
-      id: crypto.randomUUID(),
-      content: input.trim(),
       role: "user",
-      timestamp: new Date(),
+      content: input,
     };
 
     setMessages((prev) => [...prev, userMessage]);
@@ -45,24 +34,33 @@ export default function Chat() {
     setIsLoading(true);
 
     try {
-      const result = await queryDocuments(userMessage.content);
+      // Simulate document analysis response
+      const result = await analyzeDocument("https://example.com/example.pdf", "example.pdf");
 
-      if (result.success) {
+      if (result.success && result.analysis) {
+        const analysis = result.analysis;
         const assistantMessage: Message = {
-          id: crypto.randomUUID(),
-          content: result.answer || "I could not find a relevant answer in the documents.",
           role: "assistant",
-          timestamp: new Date(),
+          content: `I've analyzed your document. Here's what I found:
+          - Document Type: ${analysis.documentType}
+          - Page Count: ${analysis.pageCount}
+          - Language: ${analysis.language}
+          - Extracted ${analysis.entities.length} entities
+          - Validation Status: ${analysis.isValid ? "Valid" : "Invalid"}
+          ${analysis.validationErrors ? `\nValidation Errors:\n${analysis.validationErrors.join("\n")}` : ""}`,
+          sources: analysis.entities.map(
+            (entity) => `${entity.type}: ${entity.value} (${entity.confidence}% confidence)`,
+          ),
         };
+
         setMessages((prev) => [...prev, assistantMessage]);
       } else {
-        throw new Error(result.error);
+        throw new Error(result.error || "Failed to analyze document");
       }
     } catch (error) {
-      toast.error("Failed to get answer", {
-        description: "Please try again",
+      toast.error("Failed to analyze document", {
+        description: "Please try again.",
       });
-      console.error("Error getting answer:", error);
     } finally {
       setIsLoading(false);
     }
@@ -70,145 +68,60 @@ export default function Chat() {
 
   return (
     <Card className="w-full h-full">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-xl flex items-center gap-2">
-          <MessageSquare className="w-5 h-5" />
-          Digital Twin
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Bot className="w-5 h-5" />
+          Document Analysis Assistant
         </CardTitle>
-        <CardDescription>
-          I'm your digital replica. I understand your documents and can handle applications just like you would.
-        </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-4">
-        <ScrollArea className="h-[600px] pr-4">
-          {messages.length === 0 && (
-            <div className="text-center text-muted-foreground p-8">
-              <p className="mb-2">👋 Hi! I'm your Digital Twin. I've learned about you from your documents.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-w-md mx-auto mt-4">
-                <Button
-                  variant="outline"
-                  className="text-sm"
-                  onClick={() => setInput("What personal information have you learned about me?")}
-                >
-                  View My Profile
-                </Button>
-                <Button
-                  variant="outline"
-                  className="text-sm"
-                  onClick={() => setInput("What applications can you submit on my behalf?")}
-                >
-                  Available Applications
-                </Button>
-                <Button
-                  variant="outline"
-                  className="text-sm"
-                  onClick={() => setInput("Can you help me apply for a visa using my existing documents?")}
-                >
-                  Start Visa Application
-                </Button>
-                <Button
-                  variant="outline"
-                  className="text-sm"
-                  onClick={() => setInput("What additional documents do you need from me?")}
-                >
-                  Required Documents
-                </Button>
-              </div>
-            </div>
-          )}
-          <div className="flex flex-col gap-4">
-            {messages.map((message) => (
+      <CardContent className="flex flex-col h-[calc(100vh-12rem)]">
+        <ScrollArea className="flex-1 pr-4">
+          <div className="space-y-4">
+            {messages.map((message, index) => (
               <div
-                key={message.id}
-                className={`flex gap-3 ${message.role === "assistant" ? "flex-row" : "flex-row-reverse"}`}
+                key={`message-${index}-${message.role}`}
+                className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback>{message.role === "assistant" ? "Twin" : "You"}</AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col gap-2 max-w-[80%]">
-                  <div
-                    className={`rounded-lg px-4 py-2 ${
-                      message.role === "assistant" ? "bg-secondary" : "bg-primary text-primary-foreground"
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                    <time className="text-xs opacity-50">{message.timestamp.toLocaleTimeString()}</time>
+                {message.role === "assistant" && (
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Bot className="w-4 h-4 text-primary" />
                   </div>
+                )}
+                <div
+                  className={`max-w-[80%] rounded-lg p-4 ${
+                    message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                  }`}
+                >
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                   {message.sources && message.sources.length > 0 && (
-                    <div className="text-xs text-muted-foreground px-4">
-                      <p className="font-medium">Found in:</p>
+                    <div className="mt-2 text-xs opacity-80">
+                      <p className="font-medium mb-1">Sources:</p>
                       <ul className="list-disc list-inside">
-                        {message.sources.map((source) => (
-                          <li key={`${message.id}-${source}`} className="truncate">
-                            {source}
-                          </li>
+                        {message.sources.map((source, idx) => (
+                          <li key={`source-${idx}-${source}`}>{source}</li>
                         ))}
                       </ul>
                     </div>
                   )}
-                  {message.action && (
-                    <div className="flex flex-wrap gap-2 px-4">
-                      {message.action.type === "application_start" && (
-                        <Button size="sm" variant="secondary">
-                          Continue Application
-                        </Button>
-                      )}
-                      {message.action.type === "document_request" && (
-                        <Button size="sm" variant="secondary">
-                          Upload Missing Documents
-                        </Button>
-                      )}
-                      {message.action.type === "info_collection" && (
-                        <Button size="sm" variant="secondary">
-                          Review Information
-                        </Button>
-                      )}
-                      {message.action.type === "application_review" && (
-                        <Button size="sm" variant="secondary">
-                          Review Before Submission
-                        </Button>
-                      )}
-                    </div>
-                  )}
                 </div>
+                {message.role === "user" && (
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <User className="w-4 h-4 text-primary" />
+                  </div>
+                )}
               </div>
             ))}
-            {isLoading && (
-              <div className="flex gap-3">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback>Twin</AvatarFallback>
-                </Avatar>
-                <div className="bg-secondary rounded-lg px-4 py-2 max-w-[80%]">
-                  <div className="flex gap-1">
-                    <span
-                      className="w-1.5 h-1.5 bg-foreground/50 rounded-full animate-bounce"
-                      style={{ animationDelay: "0ms" }}
-                    />
-                    <span
-                      className="w-1.5 h-1.5 bg-foreground/50 rounded-full animate-bounce"
-                      style={{ animationDelay: "150ms" }}
-                    />
-                    <span
-                      className="w-1.5 h-1.5 bg-foreground/50 rounded-full animate-bounce"
-                      style={{ animationDelay: "300ms" }}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </ScrollArea>
-
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleSubmit} className="flex gap-2 mt-4">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Tell me what you need help with..."
-            className="flex-1"
+            placeholder="Ask about your documents..."
             disabled={isLoading}
           />
-          <Button type="submit" disabled={!input.trim() || isLoading}>
-            {isLoading ? "Thinking..." : "Send"}
+          <Button type="submit" disabled={isLoading}>
+            <Send className="w-4 h-4" />
           </Button>
         </form>
       </CardContent>
