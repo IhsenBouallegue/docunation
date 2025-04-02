@@ -8,7 +8,7 @@ export const documentLocationSchema = z.object({
 
 // Main document schema
 export const documentSchema = z.object({
-  id: z.string().uuid().optional(), // Optional for new documents
+  id: z.string().uuid(),
   name: z.string(),
   url: z.string(),
   type: z.string(),

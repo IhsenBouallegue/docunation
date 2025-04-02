@@ -1,38 +1,23 @@
 "use server";
 
+import type { Document } from "@/app/types/document";
 import { mastra } from "@/mastra";
 
-interface ParsedDocument {
-  id: string;
-  content: string;
-  metadata: {
-    fileName: string;
-    [key: string]: string | undefined;
-  };
-}
-
-export async function storeEmbeddings(documents: ParsedDocument[]) {
+export async function storeEmbeddings(document: Document) {
   try {
-    // Process each document through Mastra's document processing workflow
-    const embeddingPromises = documents.map(async (doc) => {
-      const { runId, start } = await mastra.getWorkflow("documentProcessingWorkflow").createRun();
+    const { start } = await mastra.getWorkflow("documentProcessingWorkflow").createRun();
 
-      const result = await start({
-        triggerData: {
-          text: doc.content,
-          title: doc.metadata.fileName,
-        },
-      });
-
-      return result;
+    const result = await start({
+      triggerData: {
+        text: document.content,
+        documentId: document.id,
+      },
     });
-
-    const results = await Promise.all(embeddingPromises);
 
     return {
       success: true,
-      message: `Successfully stored embeddings for ${results.length} documents`,
-      results,
+      message: `Successfully stored embeddings for ${document.id}`,
+      result,
     };
   } catch (error) {
     console.error("Error storing embeddings:", error);

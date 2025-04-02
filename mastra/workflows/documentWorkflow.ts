@@ -10,25 +10,24 @@ const processDocumentStep = new Step({
   description: "Process a document and store it in the vector database",
   inputSchema: z.object({
     text: z.string().describe("The text content of the document"),
-    title: z.string().optional().describe("Optional title of the document"),
+    documentId: z.string().describe("The ID of the document"),
   }),
   execute: async ({ context }) => {
-    const triggerData = context?.getStepResult<{ text: string; title?: string }>("trigger");
+    const triggerData = context?.getStepResult<{ text: string; documentId: string }>("trigger");
 
     if (!triggerData) {
       throw new Error("Trigger data not found");
     }
 
-    const { text, title = "Untitled Document" } = triggerData;
+    const { text, documentId } = triggerData;
 
     // Process and store the document
-    const result = await processAndStoreDocument(text, title);
+    const result = await processAndStoreDocument(text, documentId);
 
     return {
-      title: result.title,
       totalChunks: result.totalChunks,
       totalEmbeddings: result.totalEmbeddings,
-      message: `Successfully processed and stored document "${result.title}" with ${result.totalChunks} chunks.`,
+      message: `Successfully processed and stored document with ${result.totalChunks} chunks.`,
     };
   },
 });
@@ -72,7 +71,7 @@ export const documentProcessingWorkflow = new Workflow({
   name: "document-processing-workflow",
   triggerSchema: z.object({
     text: z.string().describe("The text content of the document"),
-    title: z.string().optional().describe("Optional title of the document"),
+    documentId: z.string().describe("The ID of the document"),
   }),
 }).step(processDocumentStep);
 

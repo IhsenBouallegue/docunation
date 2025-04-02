@@ -10,7 +10,7 @@ export const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 /**
  * Process a text document and split it into chunks
  */
-export async function processDocument(text: string, title = "Untitled Document") {
+export async function processDocument(text: string) {
   try {
     // Create a document from the text
     const doc = MDocument.fromText(text);
@@ -24,7 +24,6 @@ export async function processDocument(text: string, title = "Untitled Document")
     });
 
     return {
-      title,
       chunks,
       totalChunks: chunks.length,
     };
@@ -37,7 +36,7 @@ export async function processDocument(text: string, title = "Untitled Document")
 /**
  * Generate embeddings for document chunks and store them in PostgreSQL
  */
-export async function generateAndStoreEmbeddings(chunks: { text: string }[], title = "Untitled Document") {
+export async function generateAndStoreEmbeddings(chunks: { text: string }[], documentId: string) {
   try {
     // Generate embeddings for the chunks
     const { embeddings } = await embedMany({
@@ -58,11 +57,11 @@ export async function generateAndStoreEmbeddings(chunks: { text: string }[], tit
       vectors: embeddings,
       metadata: chunks.map((chunk) => ({
         text: chunk.text,
+        documentId,
       })),
     });
 
     return {
-      title,
       totalEmbeddings: embeddings.length,
     };
   } catch (error) {
@@ -87,18 +86,17 @@ export function createPgVectorQueryTool() {
 /**
  * Process a document, generate embeddings, and store them in PostgreSQL
  */
-export async function processAndStoreDocument(text: string, title = "Untitled Document") {
+export async function processAndStoreDocument(text: string, documentId: string) {
   try {
     // Process the document
-    const { chunks } = await processDocument(text, title);
+    const { chunks } = await processDocument(text);
 
     // Generate and store embeddings
-    const result = await generateAndStoreEmbeddings(chunks, title);
+    const { totalEmbeddings } = await generateAndStoreEmbeddings(chunks, documentId);
 
     return {
-      title,
       totalChunks: chunks.length,
-      totalEmbeddings: result.totalEmbeddings,
+      totalEmbeddings,
     };
   } catch (error) {
     console.error("Error processing and storing document:", error);

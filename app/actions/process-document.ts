@@ -8,8 +8,6 @@ import { documents } from "@/app/db/schema";
 import type { Document, DocumentResponse } from "@/app/types/document";
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
-import { MDocument } from "@mastra/rag";
-import { eq } from "drizzle-orm";
 import { LlamaParseReader } from "llamaindex";
 import { z } from "zod";
 import { storeEmbeddings } from "./store-embeddings";
@@ -87,54 +85,34 @@ export async function processDocument(file: UploadedFile): Promise<DocumentRespo
     const parsedDocs = await reader.loadData(tempPath);
 
     // Process the first document
-    const doc = parsedDocs[0];
-    if (!doc) {
+    const documentContent = parsedDocs[0];
+    if (!documentContent) {
       return { success: false, error: "No content found in document" };
     }
 
-    // Create chunks from the parsed content
-    const mDoc = MDocument.fromText(doc.text);
-    const chunks = await mDoc.chunk({
-      strategy: "recursive",
-      size: 512,
-      overlap: 50,
-      separator: "\n",
-    });
-
-    // Store embeddings using the existing storeEmbeddings function
-    const parsedDocument = {
-      id: doc.id_,
-      content: doc.text,
-      metadata: {
-        fileName: file.name,
-        file_type: doc.metadata.file_type || file.type,
-      },
-    };
-
-    const embeddingResult = await storeEmbeddings([parsedDocument]);
-    if (!embeddingResult.success) {
-      return { success: false, error: embeddingResult.error };
-    }
-
-    // Analyze document to get title and tags
-    const { title, tags } = await analyzeDocument(doc.text, file.name, doc.metadata.file_type || file.type);
-    console.log("title", title);
-    console.log("tags", tags);
     // Save to database
     try {
+      const { title, tags } = await analyzeDocument(documentContent.text, file.name, file.type);
+      console.log("title", title);
+      console.log("tags", tags);
+
       const [savedDoc] = await db
         .insert(documents)
         .values({
           name: title || file.name, // Use generated title if available
           url: file.url,
-          type: doc.metadata.file_type || file.type,
-          content: doc.text,
+          type: file.type,
+          content: documentContent.text,
           tags,
           createdAt: new Date(),
           updatedAt: new Date(),
         })
         .returning();
 
+      const embeddingResult = await storeEmbeddings(savedDoc as Document);
+      if (!embeddingResult.success) {
+        return { success: false, error: embeddingResult.error };
+      }
       return {
         success: true,
         document: savedDoc as Document,
