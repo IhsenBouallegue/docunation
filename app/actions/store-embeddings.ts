@@ -1,7 +1,15 @@
 "use server";
 
 import { mastra } from "@/mastra";
-import type { ParsedDocument } from "./parse-documents";
+
+interface ParsedDocument {
+  id: string;
+  content: string;
+  metadata: {
+    fileName: string;
+    [key: string]: string | undefined;
+  };
+}
 
 export async function storeEmbeddings(documents: ParsedDocument[]) {
   try {

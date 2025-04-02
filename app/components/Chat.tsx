@@ -1,28 +1,29 @@
 "use client";
 
-import { type DocumentAnalysis, analyzeDocument } from "@/app/actions/analyze-document";
+import { generateChatResponse } from "@/app/actions/chat";
+import type { Document } from "@/app/types/document";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Bot, Send, User } from "lucide-react";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
-  sources?: string[];
+  document?: Document;
 }
 
 export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isPending) return;
 
     const userMessage: Message = {
       role: "user",
@@ -31,39 +32,25 @@ export default function Chat() {
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    setIsLoading(true);
 
-    try {
-      // Simulate document analysis response
-      const result = await analyzeDocument("https://example.com/example.pdf", "example.pdf");
+    startTransition(async () => {
+      try {
+        const response = await generateChatResponse(input);
 
-      if (result.success && result.analysis) {
-        const analysis = result.analysis;
-        const assistantMessage: Message = {
-          role: "assistant",
-          content: `I've analyzed your document. Here's what I found:
-          - Document Type: ${analysis.documentType}
-          - Page Count: ${analysis.pageCount}
-          - Language: ${analysis.language}
-          - Extracted ${analysis.entities.length} entities
-          - Validation Status: ${analysis.isValid ? "Valid" : "Invalid"}
-          ${analysis.validationErrors ? `\nValidation Errors:\n${analysis.validationErrors.join("\n")}` : ""}`,
-          sources: analysis.entities.map(
-            (entity) => `${entity.type}: ${entity.value} (${entity.confidence}% confidence)`,
-          ),
-        };
-
-        setMessages((prev) => [...prev, assistantMessage]);
-      } else {
-        throw new Error(result.error || "Failed to analyze document");
+        if (response.success && response.message) {
+          const assistantMessage: Message = {
+            role: "assistant",
+            content: response.message,
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
+        } else {
+          toast.error(`Failed to get response: ${response.error || "Unknown error"}`);
+        }
+      } catch (error) {
+        console.error("Error in chat:", error);
+        toast.error("Failed to get response from the assistant");
       }
-    } catch (error) {
-      toast.error("Failed to analyze document", {
-        description: "Please try again.",
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    });
   };
 
   return (
@@ -71,10 +58,10 @@ export default function Chat() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Bot className="w-5 h-5" />
-          Document Analysis Assistant
+          Document Assistant
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col h-[calc(100vh-12rem)]">
+      <CardContent className="flex flex-col h-full">
         <ScrollArea className="flex-1 pr-4">
           <div className="space-y-4">
             {messages.map((message, index) => (
@@ -93,13 +80,13 @@ export default function Chat() {
                   }`}
                 >
                   <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  {message.sources && message.sources.length > 0 && (
+                  {message.document && (
                     <div className="mt-2 text-xs opacity-80">
-                      <p className="font-medium mb-1">Sources:</p>
+                      <p className="font-medium mb-1">Document Details:</p>
                       <ul className="list-disc list-inside">
-                        {message.sources.map((source, idx) => (
-                          <li key={`source-${idx}-${source}`}>{source}</li>
-                        ))}
+                        <li>Name: {message.document.name}</li>
+                        <li>Type: {message.document.type}</li>
+                        {message.document.tags && <li>Tags: {message.document.tags.join(", ")}</li>}
                       </ul>
                     </div>
                   )}
@@ -118,9 +105,9 @@ export default function Chat() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about your documents..."
-            disabled={isLoading}
+            disabled={isPending}
           />
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isPending}>
             <Send className="w-4 h-4" />
           </Button>
         </form>

@@ -1,5 +1,5 @@
+import { DocumentWarehouse } from "@/app/components/DocumentWarehouse";
 import Chat from "./components/Chat";
-import FileUpload from "./components/FileUpload";
 
 export default function Home() {
   return (
@@ -14,7 +14,7 @@ export default function Home() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="sticky top-8">
-            <FileUpload />
+            <DocumentWarehouse />
           </div>
           <div className="sticky top-8">
             <Chat />
