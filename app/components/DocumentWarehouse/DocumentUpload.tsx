@@ -1,6 +1,6 @@
 "use client";
 
-import { processDocument } from "@/app/actions/process-document";
+import { processDocument } from "@/app/actions/documents";
 import type { OurFileRouter } from "@/app/api/uploadthing/core";
 import type { Document } from "@/app/types/document";
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,9 @@ export function DocumentUpload({ onDocumentProcessed }: DocumentUploadProps) {
           type: file.type,
         });
 
-        if (result.success && result.document) {
+        if (result.success && result.data) {
           toast.success(`Successfully processed ${file.name}`);
-          onDocumentProcessed(result.document);
+          onDocumentProcessed(result.data);
         } else {
           toast.error(`Failed to process ${file.name}: ${result.error}`);
         }

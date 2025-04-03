@@ -1,8 +1,6 @@
 "use client";
 
-import { calculateDocumentEmbedding } from "@/app/actions/calculate-document-embedding";
-import { deleteDocument } from "@/app/actions/delete-document";
-import { updateDocument } from "@/app/actions/documents";
+import { calculateDocumentEmbedding, deleteDocument, updateDocument } from "@/app/actions/documents";
 import type { Document } from "@/app/types/document";
 import {
   AlertDialog,

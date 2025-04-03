@@ -8,10 +8,9 @@ import { DocumentDialog } from "./DocumentDialog";
 
 interface DocumentCardProps {
   document: Document;
-  onClick: (document: Document) => void;
 }
 
-export function DocumentCard({ document, onClick }: DocumentCardProps) {
+export function DocumentCard({ document }: DocumentCardProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   return (

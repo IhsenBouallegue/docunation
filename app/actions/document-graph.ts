@@ -23,7 +23,7 @@ interface GraphData {
   links: GraphLink[];
 }
 
-export async function getDocumentsWithEmbeddings(): Promise<{ success: boolean; data?: GraphData; error?: string }> {
+export async function createDocumentGraph(): Promise<{ success: boolean; data?: GraphData; error?: string }> {
   try {
     // Get all documents with their embeddings
     const docs = await db.select().from(documents);

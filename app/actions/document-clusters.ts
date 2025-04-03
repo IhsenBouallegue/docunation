@@ -13,7 +13,11 @@ interface DocumentCluster {
   }>;
 }
 
-export async function clusterDocuments(): Promise<{ success: boolean; clusters?: DocumentCluster[]; error?: string }> {
+export async function getDocumentClusters(): Promise<{
+  success: boolean;
+  clusters?: DocumentCluster[];
+  error?: string;
+}> {
   try {
     // Get all documents with their embeddings
     const docs = await db.select().from(documents);

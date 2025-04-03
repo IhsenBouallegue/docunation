@@ -1,6 +1,6 @@
 "use client";
 
-import { getDocumentsWithEmbeddings } from "@/app/actions/get-documents-with-embeddings";
+import { createDocumentGraph } from "@/app/actions/document-graph";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
@@ -37,7 +37,7 @@ export function DocumentGraphCard() {
         setError(null);
 
         // Get graph data from server
-        const result = await getDocumentsWithEmbeddings();
+        const result = await createDocumentGraph();
         if (!result.success || !result.data) {
           throw new Error(result.error);
         }

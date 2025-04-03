@@ -11,13 +11,12 @@ import { DocumentUpload } from "./DocumentUpload";
 
 export function DocumentWarehouse() {
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
 
   useEffect(() => {
     const loadDocuments = async () => {
       const result = await getDocuments();
-      if (result.success && result.documents) {
-        setDocuments(result.documents);
+      if (result.success && result.data) {
+        setDocuments(result.data);
       } else {
         toast.error("Failed to load documents");
       }
@@ -34,15 +33,11 @@ export function DocumentWarehouse() {
     handleDocumentProcessed(document);
   };
 
-  const handleSelect = (document: Document) => {
-    setSelectedDocument(document);
-  };
-
   return (
     <div className="space-y-4">
       <DocumentUpload onDocumentProcessed={handleUpload} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <DocumentList documents={documents} onDocumentSelect={handleSelect} />
+        <DocumentList documents={documents} />
         <DocumentGraphCard />
       </div>
       <DocumentClusters />

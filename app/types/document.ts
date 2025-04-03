@@ -24,14 +24,12 @@ export type DocumentLocation = z.infer<typeof documentLocationSchema>;
 export type Document = z.infer<typeof documentSchema>;
 
 // Response types
-export interface DocumentResponse {
+export interface Response<T> {
   success: boolean;
   error?: string;
-  document?: Document;
+  data?: T;
 }
 
-export interface DocumentsResponse {
-  success: boolean;
-  error?: string;
-  documents?: Document[];
-}
+export interface DocumentResponse extends Response<Document> {}
+
+export interface DocumentsResponse extends Response<Document[]> {}

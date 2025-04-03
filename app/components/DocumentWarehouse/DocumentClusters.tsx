@@ -1,6 +1,6 @@
 "use client";
 
-import { clusterDocuments } from "@/app/actions/cluster-documents";
+import { getDocumentClusters } from "@/app/actions/document-clusters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEffect, useState } from "react";
 
@@ -24,7 +24,7 @@ export function DocumentClusters() {
         setIsLoading(true);
         setError(null);
 
-        const result = await clusterDocuments();
+        const result = await getDocumentClusters();
         if (!result.success || !result.clusters) {
           throw new Error(result.error);
         }
