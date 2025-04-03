@@ -4,6 +4,7 @@ import { getDocuments } from "@/app/actions/documents";
 import type { Document } from "@/app/types/document";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { DocumentClusters } from "./DocumentClusters";
 import { DocumentGraphCard } from "./DocumentGraphCard";
 import { DocumentList } from "./DocumentList";
 import { DocumentUpload } from "./DocumentUpload";
@@ -29,17 +30,22 @@ export function DocumentWarehouse() {
     setDocuments((prev) => [...prev, document]);
   };
 
-  return (
-    <div className="space-y-8">
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold tracking-tight">Your Documents</h2>
-          <DocumentUpload onDocumentProcessed={handleDocumentProcessed} />
-        </div>
-        <DocumentList documents={documents} onDocumentSelect={setSelectedDocument} />
-      </div>
+  const handleUpload = (document: Document) => {
+    handleDocumentProcessed(document);
+  };
 
-      <DocumentGraphCard />
+  const handleSelect = (document: Document) => {
+    setSelectedDocument(document);
+  };
+
+  return (
+    <div className="space-y-4">
+      <DocumentUpload onDocumentProcessed={handleUpload} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <DocumentList documents={documents} onDocumentSelect={handleSelect} />
+        <DocumentGraphCard />
+      </div>
+      <DocumentClusters />
     </div>
   );
 }
