@@ -1,10 +1,12 @@
 import { z } from "zod";
 
-// Document location schema
-export const documentLocationSchema = z.object({
-  storageUnit: z.string(),
-  folderBox: z.string(),
-});
+// Document location validation
+const shelfSchema = z.number().int().min(1);
+const folderSchema = z
+  .string()
+  .length(1)
+  .regex(/^[A-Z]$/);
+const sectionSchema = z.string();
 
 // Main document schema
 export const documentSchema = z.object({
@@ -13,14 +15,15 @@ export const documentSchema = z.object({
   url: z.string(),
   type: z.string(),
   content: z.string(),
-  location: documentLocationSchema.optional(),
+  shelf: shelfSchema.optional(),
+  folder: folderSchema.optional(),
+  section: sectionSchema.optional(),
   tags: z.array(z.string()).optional(),
   createdAt: z.date().optional(),
   updatedAt: z.date().optional(),
 });
 
 // Export types
-export type DocumentLocation = z.infer<typeof documentLocationSchema>;
 export type Document = z.infer<typeof documentSchema>;
 
 // Response types

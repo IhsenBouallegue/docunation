@@ -1,4 +1,4 @@
-import { jsonb, pgSchema, pgTable, text, timestamp, uuid, vector } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgSchema, text, timestamp, uuid, varchar, vector } from "drizzle-orm/pg-core";
 
 export const docuSchema = pgSchema("docu");
 
@@ -8,10 +8,9 @@ export const documents = docuSchema.table("documents", {
   url: text("url").notNull(),
   type: text("type").notNull(),
   content: text("content").notNull(),
-  location: jsonb("location").$type<{
-    storageUnit: string;
-    folderBox: string;
-  }>(),
+  shelf: integer("shelf"),
+  folder: varchar("folder", { length: 1 }),
+  section: text("section"),
   tags: jsonb("tags").array(),
   embedding: vector({ dimensions: 1536 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),

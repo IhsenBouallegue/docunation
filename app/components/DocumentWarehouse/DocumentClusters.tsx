@@ -2,7 +2,7 @@
 
 import { getDocumentClusters } from "@/app/actions/document-clusters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 interface DocumentCluster {
   id: string;
@@ -14,32 +14,20 @@ interface DocumentCluster {
 }
 
 export function DocumentClusters() {
-  const [clusters, setClusters] = useState<DocumentCluster[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const loadClusters = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const result = await getDocumentClusters();
-        if (!result.success || !result.clusters) {
-          throw new Error(result.error);
-        }
-
-        setClusters(result.clusters);
-      } catch (error) {
-        console.error("Error loading clusters:", error);
-        setError((error as Error).message);
-      } finally {
-        setIsLoading(false);
+  const {
+    data: clusters,
+    isLoading,
+    error,
+  } = useQuery<DocumentCluster[]>({
+    queryKey: ["document-clusters"],
+    queryFn: async () => {
+      const result = await getDocumentClusters();
+      if (!result.success || !result.clusters) {
+        throw new Error(result.error);
       }
-    };
-
-    loadClusters();
-  }, []);
+      return result.clusters;
+    },
+  });
 
   if (isLoading) {
     return (
@@ -64,7 +52,7 @@ export function DocumentClusters() {
         </CardHeader>
         <CardContent>
           <div className="h-[400px] flex items-center justify-center">
-            <div className="text-sm text-destructive">Error: {error}</div>
+            <div className="text-sm text-destructive">Error: {(error as Error).message}</div>
           </div>
         </CardContent>
       </Card>
@@ -78,7 +66,7 @@ export function DocumentClusters() {
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {clusters.map((cluster) => (
+          {clusters?.map((cluster) => (
             <Card key={cluster.id} className="bg-muted/30">
               <CardHeader>
                 <CardTitle className="text-lg">{cluster.name}</CardTitle>
