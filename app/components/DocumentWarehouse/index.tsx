@@ -1,6 +1,7 @@
 "use client";
 
 import { getDocuments } from "@/app/actions/documents";
+import { DocumentShelf } from "@/app/components/DocumentWarehouse/DocumentShelf";
 import type { Document } from "@/app/types/document";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -46,7 +47,6 @@ export function DocumentWarehouse() {
           <DocumentList documents={allDocuments} />
         </div>
       </div>
-
       {/* Right Column - Relationships and Clusters */}
       <div className="w-1/2 flex flex-col gap-4 min-w-[500px]">
         <div className="flex-1 overflow-hidden">
