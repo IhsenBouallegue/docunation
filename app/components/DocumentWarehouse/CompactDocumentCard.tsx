@@ -1,5 +1,6 @@
 import { DocumentDialog } from "@/app/components/DocumentWarehouse/DocumentDialog";
 import type { Document } from "@/app/types/document";
+import { Draggable } from "@hello-pangea/dnd";
 import { motion } from "framer-motion";
 import { FileArchive, FileImage, FileText, FileType } from "lucide-react";
 import { useState } from "react";
@@ -45,9 +46,10 @@ function getGradient(id: string): string {
 
 interface CompactDocumentCardProps {
   document: Document;
+  index: number;
 }
 
-export function CompactDocumentCard({ document }: CompactDocumentCardProps) {
+export function CompactDocumentCard({ document, index }: CompactDocumentCardProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   // Determine document type icon
@@ -61,32 +63,39 @@ export function CompactDocumentCard({ document }: CompactDocumentCardProps) {
 
   return (
     <>
-      <motion.div
-        layout
-        initial={{ opacity: 0, height: 0 }}
-        animate={{ opacity: 1, height: "40px" }}
-        exit={{ opacity: 0, height: 0 }}
-        className={`
-        bg-gradient-to-r ${getGradient(document.id)}
-        px-3 rounded-md shadow-sm
-        cursor-pointer hover:shadow-md transition-shadow
-        flex items-center
-      `}
-        transition={{
-          duration: 0.2,
-          ease: "easeInOut",
-        }}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsDialogOpen(true);
-        }}
-      >
-        <div className="flex items-center gap-2 text-white w-full">
-          <div className="bg-white/20 p-1 rounded">{iconMap[type]}</div>
-          <span className="text-sm font-medium truncate">{document.name}</span>
-        </div>
-      </motion.div>
+      <Draggable draggableId={document.id} index={index}>
+        {(provided, snapshot) => (
+          <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
+            <motion.div
+              layout
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "40px" }}
+              exit={{ opacity: 0, height: 0 }}
+              className={`
+                bg-gradient-to-r ${getGradient(document.id)}
+                px-3 rounded-md shadow-sm
+                cursor-pointer hover:shadow-md transition-shadow
+                flex items-center
+                ${snapshot.isDragging ? "opacity-50" : ""}
+              `}
+              transition={{
+                duration: 0.2,
+                ease: "easeInOut",
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDialogOpen(true);
+              }}
+            >
+              <div className="flex items-center gap-2 text-white w-full">
+                <div className="bg-white/20 p-1 rounded">{iconMap[type]}</div>
+                <span className="text-sm font-medium truncate">{document.name}</span>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </Draggable>
       <DocumentDialog document={document} isOpen={isDialogOpen} onClose={() => setIsDialogOpen(false)} />
     </>
   );

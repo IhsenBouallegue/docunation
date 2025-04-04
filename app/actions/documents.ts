@@ -274,3 +274,7 @@ async function processEmbeddings(document: Document) {
     return { success: false, error: (error as Error).message };
   }
 }
+
+export async function updateDocumentFolder(documentId: string, folder: string | undefined) {
+  return updateDocument(documentId, { folder });
+}

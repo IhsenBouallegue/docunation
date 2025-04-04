@@ -62,6 +62,8 @@ export function DocumentShelf({ documents, shelfNumber, isUnsorted }: DocumentSh
               isUnsorted ? "Unsorted Documents" : folder === "Unsorted" ? "Unsorted Documents" : `Folder ${folder}`
             }
             documents={docs}
+            shelfNumber={shelfNumber}
+            folderName={folder}
           />
         ))}
       </div>

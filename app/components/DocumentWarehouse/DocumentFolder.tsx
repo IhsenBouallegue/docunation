@@ -1,6 +1,7 @@
 "use client";
 
 import type { Document } from "@/app/types/document";
+import { Droppable } from "@hello-pangea/dnd";
 import { AnimatePresence, motion } from "framer-motion";
 import { Folder } from "lucide-react";
 import { useState } from "react";
@@ -9,12 +10,16 @@ import { CompactDocumentCard } from "./CompactDocumentCard";
 interface DocumentFolderProps {
   title: string;
   documents: Document[];
+  shelfNumber: number;
+  folderName: string;
 }
 
-export function DocumentFolder({ title, documents }: DocumentFolderProps) {
+export function DocumentFolder({ title, documents, shelfNumber, folderName }: DocumentFolderProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const toggleExpanded = () => setIsExpanded(!isExpanded);
+
+  const droppableId = `folder-${shelfNumber}-${folderName}`;
 
   return (
     <div className="relative w-full max-w-md mx-auto">
@@ -33,15 +38,24 @@ export function DocumentFolder({ title, documents }: DocumentFolderProps) {
         className="w-full border border-dashed border-slate-300 rounded-lg bg-white cursor-pointer text-left relative"
         onClick={toggleExpanded}
       >
-        <div className="p-3 pb-6 overflow-hidden">
-          <div className="space-y-2">
-            <AnimatePresence initial={false}>
-              {documents.slice(0, isExpanded ? documents.length : 2).map((doc) => (
-                <CompactDocumentCard key={doc.id} document={doc} />
-              ))}
-            </AnimatePresence>
-          </div>
-        </div>
+        <Droppable droppableId={droppableId}>
+          {(provided, snapshot) => (
+            <div
+              ref={provided.innerRef}
+              {...provided.droppableProps}
+              className={`p-3 pb-6 overflow-hidden ${snapshot.isDraggingOver ? "bg-slate-50" : ""}`}
+            >
+              <div className="space-y-2">
+                <AnimatePresence initial={false}>
+                  {documents.slice(0, isExpanded ? documents.length : 2).map((doc, index) => (
+                    <CompactDocumentCard key={doc.id} document={doc} index={index} />
+                  ))}
+                </AnimatePresence>
+              </div>
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
 
         {/* More Documents Label */}
         <AnimatePresence mode="wait">

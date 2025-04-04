@@ -1,4 +1,5 @@
 import type { Document } from "@/app/types/document";
+import { Droppable } from "@hello-pangea/dnd";
 import { AnimatePresence, motion } from "framer-motion";
 import { Inbox } from "lucide-react";
 import { useState } from "react";
@@ -33,13 +34,22 @@ export function UnsortedDocumentTray({ documents }: UnsortedDocumentTrayProps) {
       </button>
 
       {/* Documents */}
-      <div className="space-y-2">
-        <AnimatePresence initial={false}>
-          {documents.slice(0, isExpanded ? documents.length : 2).map((doc) => (
-            <CompactDocumentCard key={doc.id} document={doc} />
-          ))}
-        </AnimatePresence>
-      </div>
+      <Droppable droppableId="unsorted">
+        {(provided, snapshot) => (
+          <div
+            ref={provided.innerRef}
+            {...provided.droppableProps}
+            className={`space-y-2 ${snapshot.isDraggingOver ? "bg-slate-100/50 rounded-lg p-2" : ""}`}
+          >
+            <AnimatePresence initial={false}>
+              {documents.slice(0, isExpanded ? documents.length : 2).map((doc, index) => (
+                <CompactDocumentCard key={doc.id} document={doc} index={index} />
+              ))}
+            </AnimatePresence>
+            {provided.placeholder}
+          </div>
+        )}
+      </Droppable>
 
       {/* More Documents Label */}
       <AnimatePresence mode="wait">
