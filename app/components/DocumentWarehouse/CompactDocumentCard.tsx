@@ -1,9 +1,12 @@
+import { deleteDocument } from "@/app/actions/documents";
 import { DocumentDialog } from "@/app/components/DocumentWarehouse/DocumentDialog";
 import type { Document } from "@/app/types/document";
+import { Button } from "@/components/ui/button";
 import { Draggable } from "@hello-pangea/dnd";
 import { motion } from "framer-motion";
-import { FileArchive, FileImage, FileText, FileType } from "lucide-react";
+import { FileArchive, FileImage, FileText, FileType, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 // Map document types to icons
 const iconMap = {
@@ -47,10 +50,12 @@ function getGradient(id: string): string {
 interface CompactDocumentCardProps {
   document: Document;
   index: number;
+  onDelete?: () => void;
 }
 
-export function CompactDocumentCard({ document, index }: CompactDocumentCardProps) {
+export function CompactDocumentCard({ document, index, onDelete }: CompactDocumentCardProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Determine document type icon
   const type = document.type.startsWith("application/pdf")
@@ -60,6 +65,27 @@ export function CompactDocumentCard({ document, index }: CompactDocumentCardProp
       : document.type.startsWith("text")
         ? "text"
         : "other";
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening the dialog
+    if (isDeleting) return;
+
+    try {
+      setIsDeleting(true);
+      const result = await deleteDocument(document.id);
+
+      if (result.success) {
+        toast.success("Document deleted successfully");
+        onDelete?.();
+      } else {
+        toast.error(`Failed to delete document: ${result.error}`);
+      }
+    } catch (error) {
+      toast.error(`Error deleting document: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <>
@@ -72,6 +98,7 @@ export function CompactDocumentCard({ document, index }: CompactDocumentCardProp
               animate={{ opacity: 1, height: "40px" }}
               exit={{ opacity: 0, height: 0 }}
               className={`
+                group relative
                 bg-gradient-to-r ${getGradient(document.id)}
                 px-3 rounded-md shadow-sm
                 cursor-pointer hover:shadow-md transition-shadow
@@ -92,6 +119,17 @@ export function CompactDocumentCard({ document, index }: CompactDocumentCardProp
                 <div className="bg-white/20 p-1 rounded">{iconMap[type]}</div>
                 <span className="text-sm font-medium truncate">{document.name}</span>
               </div>
+
+              {/* Delete button - appears on hover */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={handleDelete}
+                disabled={isDeleting}
+              >
+                <Trash2 className="h-4 w-4 text-white/80 hover:text-white" />
+              </Button>
             </motion.div>
           </div>
         )}

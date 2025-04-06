@@ -1,7 +1,7 @@
 "use client";
 
 import { processDocument } from "@/app/actions/documents";
-import type { OurFileRouter } from "@/app/api/uploadthing/core";
+import { uploadDocument } from "@/app/actions/upload";
 import type { Document } from "@/app/types/document";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,11 +12,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { UploadDropzone } from "@uploadthing/react";
 import { FileText, Upload } from "lucide-react";
-import { useTransition } from "react";
+import { useRef, useTransition } from "react";
 import { toast } from "sonner";
-import type { ClientUploadedFileData } from "uploadthing/types";
 
 interface DocumentUploadProps {
   onDocumentProcessed: (document: Document) => void;
@@ -24,23 +22,45 @@ interface DocumentUploadProps {
 
 export function DocumentUpload({ onDocumentProcessed }: DocumentUploadProps) {
   const [isPending, startTransition] = useTransition();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUploadComplete = (uploadedFiles: ClientUploadedFileData<null>[]) => {
-    for (const file of uploadedFiles) {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files?.length) return;
+
+    for (const file of Array.from(files)) {
       startTransition(async () => {
-        const result = await processDocument({
-          name: file.name,
-          url: file.ufsUrl,
-          type: file.type,
-        });
+        try {
+          // Create FormData and append file
+          const formData = new FormData();
+          formData.append("file", file);
 
-        if (result.success && result.data) {
-          toast.success(`Successfully processed ${file.name}`);
-          onDocumentProcessed(result.data);
-        } else {
-          toast.error(`Failed to process ${file.name}: ${result.error}`);
+          // Upload file and get MinIO metadata
+          const { bucketName, objectKey, name, type } = await uploadDocument(formData);
+
+          // Process the document with MinIO metadata
+          const result = await processDocument({
+            name,
+            bucketName,
+            objectKey,
+            type,
+          });
+
+          if (result.success && result.data) {
+            toast.success(`Successfully processed ${name}`);
+            onDocumentProcessed(result.data);
+          } else {
+            toast.error(`Failed to process ${name}: ${result.error}`);
+          }
+        } catch (error) {
+          toast.error(`Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`);
         }
       });
+    }
+
+    // Reset the input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
@@ -60,13 +80,25 @@ export function DocumentUpload({ onDocumentProcessed }: DocumentUploadProps) {
           </DialogTitle>
           <DialogDescription>Upload your documents to process and analyze them</DialogDescription>
         </DialogHeader>
-        <UploadDropzone<OurFileRouter, "documentUploader">
-          endpoint="documentUploader"
-          onClientUploadComplete={handleUploadComplete}
-          onUploadError={(error) => {
-            toast.error(`Upload failed: ${error.message}`);
-          }}
-        />
+        <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept=".pdf"
+            multiple
+            className="hidden"
+            id="file-upload"
+          />
+          <label
+            htmlFor="file-upload"
+            className="flex flex-col items-center justify-center w-full h-full cursor-pointer"
+          >
+            <Upload className="w-12 h-12 mb-4 text-gray-400" />
+            <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
+            <p className="text-xs text-gray-500 mt-1">PDF files up to 32MB</p>
+          </label>
+        </div>
       </DialogContent>
     </Dialog>
   );

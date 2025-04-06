@@ -157,9 +157,11 @@ export function DocumentDialog({ document, isOpen, onClose }: DocumentDialogProp
             </div>
             <div className="flex items-center gap-3">
               <div className="flex flex-col items-center">
-                <div className="bg-white p-2 rounded-lg border">
-                  <QRCodeSVG value={document.url} size={64} level="H" includeMargin={false} />
-                </div>
+                {document.url && (
+                  <div className="bg-white p-2 rounded-lg border">
+                    <QRCodeSVG value={document.url} size={64} level="H" includeMargin={false} />
+                  </div>
+                )}
                 <span className="text-xs text-muted-foreground mt-1">Scan to access</span>
               </div>
               <Button variant="outline" size="icon" asChild className="h-10 w-10">

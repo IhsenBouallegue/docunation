@@ -33,6 +33,11 @@ export function DocumentList({ documents }: DocumentListProps) {
     },
   });
 
+  // Handle document deletion
+  const handleDocumentDeleted = () => {
+    queryClient.invalidateQueries({ queryKey: ["documents"] });
+  };
+
   // Separate documents into sorted and unsorted
   const { sortedDocuments, unsortedDocuments } = useMemo(() => {
     return documents.reduce(
@@ -96,11 +101,16 @@ export function DocumentList({ documents }: DocumentListProps) {
     <DragDropContext onDragEnd={handleDragEnd}>
       <div className="space-y-4">
         {/* Unsorted Documents Tray */}
-        <UnsortedDocumentTray documents={unsortedDocuments} />
+        <UnsortedDocumentTray documents={unsortedDocuments} onDocumentDeleted={handleDocumentDeleted} />
 
         {/* Regular shelves */}
         {sortedShelves.map(({ shelfNumber, documents }) => (
-          <DocumentShelf key={shelfNumber} shelfNumber={shelfNumber} documents={documents} />
+          <DocumentShelf
+            key={shelfNumber}
+            shelfNumber={shelfNumber}
+            documents={documents}
+            onDocumentDeleted={handleDocumentDeleted}
+          />
         ))}
       </div>
     </DragDropContext>

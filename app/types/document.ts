@@ -12,7 +12,9 @@ const sectionSchema = z.string();
 export const documentSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
-  url: z.string(),
+  bucketName: z.string(),
+  objectKey: z.string(),
+  url: z.string().optional(), // URL is generated on demand
   type: z.string(),
   content: z.string(),
   shelf: shelfSchema.optional(),

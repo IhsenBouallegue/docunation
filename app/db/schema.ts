@@ -5,7 +5,8 @@ export const docuSchema = pgSchema("docu");
 export const documents = docuSchema.table("documents", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
-  url: text("url").notNull(),
+  bucketName: text("bucket_name").notNull(),
+  objectKey: text("object_key").notNull(),
   type: text("type").notNull(),
   content: text("content").notNull(),
   shelf: integer("shelf"),
