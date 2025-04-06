@@ -36,7 +36,7 @@ export function DocumentShelf({ documents, shelfNumber, onDocumentDeleted }: Doc
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="relative border p-6 rounded-xl"
+      className="relative border p-6 rounded-xl bg-gradient-to-br bg-card"
     >
       {/* Shelf Label */}
       <div className="flex items-center gap-2 mb-6">

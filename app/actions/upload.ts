@@ -10,17 +10,22 @@ export async function uploadDocument(
     throw new Error("No file provided");
   }
 
-  // Convert the file to a buffer
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
+  try {
+    // Convert the file to a buffer
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
 
-  // Upload to MinIO and get metadata
-  const { bucketName, objectKey } = await uploadFile(buffer, file.name, file.type);
+    // Upload to MinIO and get metadata
+    const { bucketName, objectKey } = await uploadFile(buffer, file.name, file.type);
 
-  return {
-    bucketName,
-    objectKey,
-    name: file.name,
-    type: file.type,
-  };
+    return {
+      bucketName,
+      objectKey,
+      name: file.name,
+      type: file.type,
+    };
+  } catch (error) {
+    console.error(`Error uploading file ${file.name}:`, error);
+    throw new Error(`Failed to upload ${file.name}: ${error instanceof Error ? error.message : "Unknown error"}`);
+  }
 }

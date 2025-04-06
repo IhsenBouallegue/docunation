@@ -29,6 +29,22 @@ interface QueuedFile {
   error?: string;
 }
 
+// Helper function to process chunks of files in parallel
+async function processFilesInChunks(
+  files: QueuedFile[],
+  chunkSize: number,
+  processFile: (file: QueuedFile) => Promise<void>,
+): Promise<void> {
+  const chunks = [];
+  for (let i = 0; i < files.length; i += chunkSize) {
+    chunks.push(files.slice(i, i + chunkSize));
+  }
+
+  for (const chunk of chunks) {
+    await Promise.all(chunk.map((file) => processFile(file)));
+  }
+}
+
 export function DocumentUpload() {
   const [isPending, startTransition] = useTransition();
   const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([]);
@@ -62,75 +78,88 @@ export function DocumentUpload() {
     setQueuedFiles((prev) => prev.map((file) => (file.id === id ? { ...file, ...updates } : file)));
   };
 
+  const processFile = async (queuedFile: QueuedFile) => {
+    const { file, id } = queuedFile;
+
+    try {
+      // Update status to uploading
+      updateFileStatus(id, { status: "uploading", progress: 0 });
+
+      // Simulate upload progress (since FormData doesn't provide progress)
+      const progressInterval = setInterval(() => {
+        setQueuedFiles((prev) => {
+          const file = prev.find((f) => f.id === id);
+          if (file && file.status === "uploading" && file.progress < 90) {
+            return prev.map((f) => (f.id === id ? { ...f, progress: f.progress + 10 } : f));
+          }
+          return prev;
+        });
+      }, 300);
+
+      // Create FormData and append file
+      const formData = new FormData();
+      formData.append("file", file);
+
+      // Upload file and get MinIO metadata
+      const { bucketName, objectKey, name, type } = await uploadDocument(formData);
+
+      clearInterval(progressInterval);
+      updateFileStatus(id, { status: "processing", progress: 95 });
+
+      // Process the document with MinIO metadata
+      const result = await processDocument({
+        name,
+        bucketName,
+        objectKey,
+        type,
+      });
+
+      if (!result.success || !result.data) {
+        throw new Error(result.error);
+      }
+
+      updateFileStatus(id, { status: "completed", progress: 100 });
+      toast.success(`Successfully processed ${name}`);
+      return true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      updateFileStatus(id, {
+        status: "error",
+        progress: 0,
+        error: errorMessage,
+      });
+      toast.error(`Upload failed: ${errorMessage}`);
+      return false;
+    }
+  };
+
   const uploadAll = async () => {
     const files = [...queuedFiles];
     let hasSuccessfulUpload = false;
 
-    for (const queuedFile of files) {
-      const { file, id } = queuedFile;
-
-      try {
-        // Update status to uploading
-        updateFileStatus(id, { status: "uploading", progress: 0 });
-
-        // Simulate upload progress (since FormData doesn't provide progress)
-        const progressInterval = setInterval(() => {
-          setQueuedFiles((prev) => {
-            const file = prev.find((f) => f.id === id);
-            if (file && file.status === "uploading" && file.progress < 90) {
-              return prev.map((f) => (f.id === id ? { ...f, progress: f.progress + 10 } : f));
-            }
-            return prev;
-          });
-        }, 300);
-
-        // Create FormData and append file
-        const formData = new FormData();
-        formData.append("file", file);
-
-        // Upload file and get MinIO metadata
-        const { bucketName, objectKey, name, type } = await uploadDocument(formData);
-
-        clearInterval(progressInterval);
-        updateFileStatus(id, { status: "processing", progress: 95 });
-
-        // Process the document with MinIO metadata
-        const result = await processDocument({
-          name,
-          bucketName,
-          objectKey,
-          type,
-        });
-
-        if (result.success && result.data) {
-          updateFileStatus(id, { status: "completed", progress: 100 });
-          toast.success(`Successfully processed ${name}`);
+    try {
+      // Process files in chunks of 5
+      await processFilesInChunks(files, 5, async (file) => {
+        const success = await processFile(file);
+        if (success) {
           hasSuccessfulUpload = true;
-        } else {
-          throw new Error(result.error);
         }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        updateFileStatus(id, {
-          status: "error",
-          progress: 0,
-          error: errorMessage,
-        });
-        toast.error(`Upload failed: ${errorMessage}`);
+      });
+
+      // If any upload was successful, invalidate queries
+      if (hasSuccessfulUpload) {
+        await queryClient.invalidateQueries({ queryKey: ["documents"] });
+        await queryClient.refetchQueries({ queryKey: ["document-graph"] });
       }
-    }
 
-    // If any upload was successful, invalidate queries
-    if (hasSuccessfulUpload) {
-      // Invalidate all document-related queries
-      await queryClient.invalidateQueries({ queryKey: ["documents"] });
-      await queryClient.refetchQueries({ queryKey: ["document-graph"] });
+      // Remove completed files after a delay
+      setTimeout(() => {
+        setQueuedFiles((prev) => prev.filter((file) => file.status === "error"));
+      }, 2000);
+    } catch (error) {
+      console.error("Error during parallel upload:", error);
+      toast.error("Some files failed to upload. Please check the error messages.");
     }
-
-    // Remove completed files after a delay
-    setTimeout(() => {
-      setQueuedFiles((prev) => prev.filter((file) => file.status === "error"));
-    }, 2000);
   };
 
   const getFileCardStyle = (status: QueuedFile["status"]) => {
