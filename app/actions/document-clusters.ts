@@ -10,6 +10,14 @@ interface DocumentCluster {
   documents: Array<{
     id: string;
     name: string;
+    currentLocation?: {
+      shelf?: number;
+      folder?: string;
+    };
+    suggestedLocation?: {
+      shelf?: number;
+      folder?: string;
+    };
   }>;
 }
 
@@ -19,7 +27,7 @@ export async function getDocumentClusters(): Promise<{
   error?: string;
 }> {
   try {
-    // Get all documents with their embeddings
+    // Get all documents with their embeddings and locations
     const docs = await db.select().from(documents);
 
     // Filter out documents without embeddings
@@ -139,6 +147,13 @@ export async function getDocumentClusters(): Promise<{
         cluster.documents.push({
           id: doc.id,
           name: doc.name,
+          currentLocation:
+            doc.shelf || doc.folder
+              ? {
+                  shelf: doc.shelf || undefined,
+                  folder: doc.folder || undefined,
+                }
+              : undefined,
         });
       }
     }

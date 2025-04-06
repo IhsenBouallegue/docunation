@@ -1,10 +1,8 @@
 "use client";
 
 import { getDocuments } from "@/app/actions/documents";
-import { DocumentShelf } from "@/app/components/DocumentWarehouse/DocumentShelf";
-import type { Document } from "@/app/types/document";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentClusters } from "./DocumentClusters";
 import { DocumentGraphCard } from "./DocumentGraphCard";
@@ -12,49 +10,46 @@ import { DocumentList } from "./DocumentList";
 import { DocumentUpload } from "./DocumentUpload";
 
 export function DocumentWarehouse() {
-  const [documents, setDocuments] = useState<Document[]>([]);
-
   // Query for fetching documents
-  const { data: fetchedDocuments } = useQuery({
+  const {
+    data: documents,
+    isPending,
+    error,
+  } = useQuery({
     queryKey: ["documents"],
     queryFn: async () => {
       const result = await getDocuments();
       if (!result.success) {
-        toast.error("Failed to load documents");
-        return [];
+        throw new Error(result.error || "Failed to load documents");
       }
       return result.data || [];
     },
   });
 
-  // Combine fetched documents with locally added ones
-  const allDocuments = [...(fetchedDocuments || []), ...documents];
-
-  const handleDocumentProcessed = (document: Document) => {
-    setDocuments((prev) => [...prev, document]);
-  };
-
-  const handleUpload = (document: Document) => {
-    handleDocumentProcessed(document);
-  };
-
   return (
     <div className="flex h-[calc(100vh-4rem)] gap-6 p-6">
       {/* Left Column - Documents */}
       <div className="w-1/2 flex flex-col gap-4 min-w-[500px]">
-        <DocumentUpload onDocumentProcessed={handleUpload} />
+        <DocumentUpload />
         <div className="flex-1 overflow-hidden">
-          <DocumentList documents={allDocuments} />
+          {isPending ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-destructive">
+              <p className="text-sm font-medium">Failed to load documents</p>
+              <p className="text-xs opacity-70">{error instanceof Error ? error.message : "Unknown error"}</p>
+            </div>
+          ) : (
+            <DocumentList documents={documents || []} />
+          )}
         </div>
       </div>
       {/* Right Column - Relationships and Clusters */}
       <div className="w-1/2 flex flex-col gap-4 min-w-[500px]">
-        <div className="flex-1 overflow-hidden">
-          <DocumentGraphCard />
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <DocumentClusters />
-        </div>
+        <DocumentGraphCard />
+        <DocumentClusters />
       </div>
     </div>
   );

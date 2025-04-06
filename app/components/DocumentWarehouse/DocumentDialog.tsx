@@ -1,6 +1,6 @@
 "use client";
 
-import { calculateDocumentEmbedding, deleteDocument, updateDocument } from "@/app/actions/documents";
+import { useCalculateDocumentEmbedding, useDeleteDocument, useUpdateDocument } from "@/app/mutations/documents";
 import type { Document } from "@/app/types/document";
 import {
   AlertDialog,
@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Brain, Download, Loader2, MapPin, Network, Pencil, Plus, Tag, Trash2, X } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 interface DocumentDialogProps {
@@ -31,91 +31,89 @@ interface DocumentDialogProps {
 }
 
 export function DocumentDialog({ document, isOpen, onClose }: DocumentDialogProps) {
-  const [isPending, startTransition] = useTransition();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [documentName, setDocumentName] = useState(document?.name || "");
   const [folder, setFolder] = useState(document?.folder || "");
   const [shelf, setShelf] = useState(document?.shelf || 0);
   const [selectedTags, setSelectedTags] = useState<string[]>(document?.tags || []);
   const [newTag, setNewTag] = useState("");
-  const [isCalculatingEmbedding, startCalculatingEmbedding] = useTransition();
-  const [isDeleting, startDeleting] = useTransition();
+
+  const { mutate: updateDoc, isPending: isUpdating } = useUpdateDocument();
+  const { mutate: deleteDoc, isPending: isDeleting } = useDeleteDocument();
 
   if (!document) return null;
 
   const handleTitleUpdate = () => {
-    startTransition(async () => {
-      const result = await updateDocument(document.id, { name: documentName });
-      if (result.success) {
-        toast.success("Document title updated successfully");
-        setIsEditingTitle(false);
-      } else {
-        toast.error(`Failed to update title: ${result.error}`);
-      }
-    });
+    updateDoc(
+      { documentId: document.id, data: { name: documentName } },
+      {
+        onSuccess: () => {
+          toast.success("Document title updated successfully");
+          setIsEditingTitle(false);
+        },
+        onError: (error) => {
+          toast.error(`Failed to update title: ${error.message}`);
+        },
+      },
+    );
   };
 
   const handleLocationUpdate = () => {
-    startTransition(async () => {
-      const result = await updateDocument(document.id, { folder, shelf });
-      if (result.success) {
-        toast.success("Location updated successfully");
-        setIsEditingLocation(false);
-      } else {
-        toast.error(`Failed to update location: ${result.error}`);
-      }
-    });
+    updateDoc(
+      { documentId: document.id, data: { folder, shelf } },
+      {
+        onSuccess: () => {
+          toast.success("Location updated successfully");
+        },
+        onError: (error) => {
+          toast.error(`Failed to update location: ${error.message}`);
+        },
+      },
+    );
   };
 
   const handleTagToggle = (tag: string) => {
     const newTags = selectedTags.includes(tag) ? selectedTags.filter((t) => t !== tag) : [...selectedTags, tag];
 
     setSelectedTags(newTags);
-    startTransition(async () => {
-      const result = await updateDocument(document.id, { tags: newTags });
-      if (!result.success) {
-        toast.error(`Failed to update tags: ${result.error}`);
-        setSelectedTags(selectedTags); // Revert on failure
-      }
-    });
+    updateDoc(
+      { documentId: document.id, data: { tags: newTags } },
+      {
+        onError: (error) => {
+          toast.error(`Failed to update tags: ${error.message}`);
+          setSelectedTags(selectedTags); // Revert on failure
+        },
+      },
+    );
   };
 
   const handleAddTag = () => {
     if (!newTag.trim() || selectedTags.includes(newTag.trim())) return;
 
     const newTags = [...selectedTags, newTag.trim()];
-    startTransition(async () => {
-      const result = await updateDocument(document.id, { tags: newTags });
-      if (result.success) {
-        setSelectedTags(newTags);
-        setNewTag("");
-      } else {
-        toast.error(`Failed to add tag: ${result.error}`);
-      }
-    });
-  };
-
-  const handleCalculateEmbedding = () => {
-    startCalculatingEmbedding(async () => {
-      const result = await calculateDocumentEmbedding(document.id);
-      if (result.success) {
-        toast.success(`Document embedding calculated successfully from ${result.chunkCount} chunks`);
-      } else {
-        toast.error(`Failed to calculate embedding: ${result.error}`);
-      }
-    });
+    updateDoc(
+      { documentId: document.id, data: { tags: newTags } },
+      {
+        onSuccess: () => {
+          setSelectedTags(newTags);
+          setNewTag("");
+        },
+        onError: (error) => {
+          toast.error(`Failed to add tag: ${error.message}`);
+        },
+      },
+    );
   };
 
   const handleDelete = () => {
-    startDeleting(async () => {
-      const result = await deleteDocument(document.id);
-      if (result.success) {
+    deleteDoc(document.id, {
+      onSuccess: () => {
         toast.success("Document deleted successfully");
         onClose(); // Close the dialog after successful deletion
-      } else {
-        toast.error(`Failed to delete document: ${result.error}`);
-      }
+      },
+      onError: (error) => {
+        toast.error(`Failed to delete document: ${error.message}`);
+      },
     });
   };
 
@@ -133,7 +131,7 @@ export function DocumentDialog({ document, isOpen, onClose }: DocumentDialogProp
                     className="text-xl font-semibold h-9"
                     onKeyDown={(e) => e.key === "Enter" && handleTitleUpdate()}
                   />
-                  <Button size="sm" onClick={handleTitleUpdate} disabled={isPending}>
+                  <Button size="sm" onClick={handleTitleUpdate} disabled={isUpdating}>
                     Save
                   </Button>
                 </div>
@@ -219,85 +217,35 @@ export function DocumentDialog({ document, isOpen, onClose }: DocumentDialogProp
             <TabsContent value="details" className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
               {/* Physical Location Section */}
               <div className="space-y-3 border-b pb-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    Physical Location
-                  </h3>
-                  {!isEditingLocation ? (
-                    <Button variant="outline" size="sm" onClick={() => setIsEditingLocation(true)} disabled={isPending}>
-                      Edit Location
-                    </Button>
-                  ) : (
-                    <Button size="sm" onClick={handleLocationUpdate} disabled={isPending}>
-                      Save Location
-                    </Button>
-                  )}
-                </div>
-
-                {isEditingLocation ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="storageUnit">Storage Unit</Label>
-                      <Input
-                        id="storageUnit"
-                        value={shelf}
-                        onChange={(e) => setShelf(Number(e.target.value))}
-                        placeholder="e.g., Cabinet 1"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="folderBox">Folder/Box</Label>
-                      <Input
-                        id="folderBox"
-                        value={folder}
-                        onChange={(e) => setFolder(e.target.value)}
-                        placeholder="e.g., Folder 42"
-                      />
-                    </div>
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  Physical Location
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="storageUnit">Storage Unit</Label>
+                    <Input
+                      id="storageUnit"
+                      value={shelf}
+                      onChange={(e) => {
+                        setShelf(Number(e.target.value));
+                        handleLocationUpdate();
+                      }}
+                      placeholder="e.g., Cabinet 1"
+                    />
                   </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground bg-muted/30 p-3 rounded-md">
-                    {shelf && folder ? (
-                      <p>
-                        <span className="font-medium">Shelf:</span> {shelf} •{" "}
-                        <span className="font-medium">Folder:</span> {folder}
-                      </p>
-                    ) : (
-                      <p>No physical location specified</p>
-                    )}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="folderBox">Folder/Box</Label>
+                    <Input
+                      id="folderBox"
+                      value={folder}
+                      onChange={(e) => {
+                        setFolder(e.target.value);
+                        handleLocationUpdate();
+                      }}
+                      placeholder="e.g., Folder 42"
+                    />
                   </div>
-                )}
-              </div>
-
-              <div className="space-y-3 border-b pb-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium flex items-center gap-2">
-                    <Brain className="h-4 w-4" />
-                    Document Embedding
-                  </h3>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCalculateEmbedding}
-                    disabled={isCalculatingEmbedding}
-                  >
-                    {isCalculatingEmbedding ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Calculating...
-                      </>
-                    ) : (
-                      <>
-                        <Brain className="mr-2 h-4 w-4" />
-                        Calculate Embedding
-                      </>
-                    )}
-                  </Button>
-                </div>
-                <div className="text-sm text-muted-foreground bg-muted/30 p-3 rounded-md">
-                  <p>Generate a semantic embedding for this document based on its content.</p>
-                  <p className="mt-1 text-xs">This will help with document similarity and grouping.</p>
                 </div>
               </div>
 
@@ -315,14 +263,14 @@ export function DocumentDialog({ document, isOpen, onClose }: DocumentDialogProp
                     onChange={(e) => setNewTag(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleAddTag()}
                     className="h-9"
-                    disabled={isPending}
+                    disabled={isUpdating}
                   />
                   <Button
                     size="sm"
                     variant="secondary"
                     onClick={handleAddTag}
                     className="h-9 px-3"
-                    disabled={isPending}
+                    disabled={isUpdating}
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
@@ -341,7 +289,7 @@ export function DocumentDialog({ document, isOpen, onClose }: DocumentDialogProp
                           type="button"
                           onClick={() => handleTagToggle(tag)}
                           className="opacity-60 hover:opacity-100 focus:opacity-100"
-                          disabled={isPending}
+                          disabled={isUpdating}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -355,11 +303,18 @@ export function DocumentDialog({ document, isOpen, onClose }: DocumentDialogProp
             </TabsContent>
 
             <TabsContent value="preview" className="flex-1 border-t mt-0 data-[state=active]:flex">
-              <iframe
-                src={`${document.url}#view=FitH`}
-                className="w-full h-full"
-                title={`Preview of ${document.name}`}
-              />
+              {document.url ? (
+                <iframe
+                  src={`${document.url.replace(/^https?:/, "")}#view=FitH`}
+                  className="w-full h-full"
+                  title={`Preview of ${document.name}`}
+                  sandbox="allow-same-origin allow-scripts"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  No preview available
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </div>

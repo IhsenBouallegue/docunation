@@ -61,19 +61,19 @@ export function DocumentGraphCard() {
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div className="h-[400px] flex items-center justify-center">
+          <div className="flex items-center justify-center">
             <div className="text-sm text-muted-foreground">Loading document relationships...</div>
           </div>
         ) : error ? (
-          <div className="h-[400px] flex items-center justify-center">
+          <div className="flex items-center justify-center">
             <div className="text-sm text-destructive">Error: {error}</div>
           </div>
         ) : (
-          <div className="h-[400px] w-full flex items-center justify-center">
+          <div className="w-full h-auto">
             <ForceGraph2D
               graphData={graphData}
               nodeLabel="name"
-              backgroundColor="#ffffff"
+              backgroundColor="transparent"
               width={600}
               height={400}
               nodeColor="color"

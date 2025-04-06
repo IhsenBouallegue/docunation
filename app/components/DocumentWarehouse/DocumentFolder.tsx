@@ -25,7 +25,15 @@ export function DocumentFolder({ title, documents, shelfNumber, folderName, onDo
   return (
     <div className="relative w-full max-w-md mx-auto">
       {/* Folder Label */}
-      <div className="absolute -top-3 left-4 z-10 flex items-center gap-2 bg-white px-2">
+      <div
+        className="absolute -top-3 left-4 z-10 flex items-center gap-2 bg-white px-2 cursor-pointer"
+        onClick={toggleExpanded}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            toggleExpanded();
+          }
+        }}
+      >
         <Folder className="h-4 w-4 text-slate-600" />
         <span className="text-sm font-medium text-slate-600">{title}</span>
         <div className="flex items-center justify-center bg-slate-100 text-slate-600 text-xs font-medium rounded-full h-5 w-5">
@@ -34,10 +42,14 @@ export function DocumentFolder({ title, documents, shelfNumber, folderName, onDo
       </div>
 
       {/* Folder Container */}
-      <button
-        type="button"
+      <div
         className="w-full border border-dashed border-slate-300 rounded-lg bg-white cursor-pointer text-left relative"
         onClick={toggleExpanded}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            toggleExpanded();
+          }
+        }}
       >
         <Droppable droppableId={droppableId}>
           {(provided, snapshot) => (
@@ -70,13 +82,13 @@ export function DocumentFolder({ title, documents, shelfNumber, folderName, onDo
                 delay: isExpanded ? 0 : 0.2,
                 ease: "easeOut",
               }}
-              className="absolute -bottom-3 left-4 z-10 flex items-center gap-2 bg-white px-2"
+              className="absolute -bottom-2 left-4 z-10 flex items-center gap-2 bg-white px-2"
             >
               <span className="text-xs font-medium text-slate-500">+{documents.length - 2} more</span>
             </motion.div>
           )}
         </AnimatePresence>
-      </button>
+      </div>
     </div>
   );
 }

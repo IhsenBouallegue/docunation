@@ -122,13 +122,13 @@ export function CompactDocumentCard({ document, index, onDelete }: CompactDocume
 
               {/* Delete button - appears on hover */}
               <Button
-                variant="ghost"
+                variant="destructive"
                 size="icon"
-                className="absolute right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute right-1 opacity-0 group-hover:opacity-100 transition-opacity size-6 "
                 onClick={handleDelete}
                 disabled={isDeleting}
               >
-                <Trash2 className="h-4 w-4 text-white/80 hover:text-white" />
+                <Trash2 className="size-3" />
               </Button>
             </motion.div>
           </div>
