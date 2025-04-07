@@ -1,7 +1,5 @@
 "use client";
 
-import { processDocument } from "@/app/actions/documents";
-import { uploadDocument } from "@/app/actions/upload";
 import type { Document } from "@/app/types/document";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,20 +11,26 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
-import { FileText, Upload, X } from "lucide-react";
+import { FileText, Trash2, Upload, X } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-
-interface DocumentUploadProps {
-  onDocumentProcessed: (document: Document) => void;
-}
 
 interface QueuedFile {
   file: File;
   id: string;
-  status: "queued" | "uploading" | "processing" | "completed" | "error";
+  status:
+    | "queued"
+    | "extracting"
+    | "uploading"
+    | "analyzing"
+    | "chunking"
+    | "embedding"
+    | "storing"
+    | "completed"
+    | "error";
   progress: number;
   error?: string;
+  generatedTitle?: string;
 }
 
 // Helper function to process chunks of files in parallel
@@ -74,53 +78,108 @@ export function DocumentUpload() {
     setQueuedFiles((prev) => prev.filter((file) => file.id !== id));
   };
 
+  const clearCompleted = () => {
+    setQueuedFiles((prev) => prev.filter((file) => file.status !== "completed"));
+  };
+
   const updateFileStatus = (id: string, updates: Partial<QueuedFile>) => {
     setQueuedFiles((prev) => prev.map((file) => (file.id === id ? { ...file, ...updates } : file)));
+  };
+
+  const getStatusMessage = (status: QueuedFile["status"]) => {
+    switch (status) {
+      case "extracting":
+        return "Extracting content...";
+      case "uploading":
+        return "Uploading...";
+      case "analyzing":
+        return "Analyzing document...";
+      case "chunking":
+        return "Processing chunks...";
+      case "embedding":
+        return "Generating embeddings...";
+      case "storing":
+        return "Storing document...";
+      case "completed":
+        return "Completed";
+      case "error":
+        return "Error";
+      default:
+        return "Queued";
+    }
   };
 
   const processFile = async (queuedFile: QueuedFile) => {
     const { file, id } = queuedFile;
 
     try {
-      // Update status to uploading
-      updateFileStatus(id, { status: "uploading", progress: 0 });
-
-      // Simulate upload progress (since FormData doesn't provide progress)
-      const progressInterval = setInterval(() => {
-        setQueuedFiles((prev) => {
-          const file = prev.find((f) => f.id === id);
-          if (file && file.status === "uploading" && file.progress < 90) {
-            return prev.map((f) => (f.id === id ? { ...f, progress: f.progress + 10 } : f));
-          }
-          return prev;
-        });
-      }, 300);
-
       // Create FormData and append file
       const formData = new FormData();
       formData.append("file", file);
 
-      // Upload file and get MinIO metadata
-      const { bucketName, objectKey, name, type } = await uploadDocument(formData);
-
-      clearInterval(progressInterval);
-      updateFileStatus(id, { status: "processing", progress: 95 });
-
-      // Process the document with MinIO metadata
-      const result = await processDocument({
-        name,
-        bucketName,
-        objectKey,
-        type,
+      // Start streaming process
+      const response = await fetch("/api/documents/process", {
+        method: "POST",
+        body: formData,
       });
 
-      if (!result.success || !result.data) {
-        throw new Error(result.error);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      updateFileStatus(id, { status: "completed", progress: 100 });
-      toast.success(`Successfully processed ${name}`);
-      return true;
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("Failed to start document processing");
+      }
+
+      const decoder = new TextDecoder();
+      let success = false;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) break;
+
+          // Process all complete JSON messages in this chunk
+          const chunk = decoder.decode(value, { stream: true });
+          const messages = chunk.split("\n").filter(Boolean);
+
+          for (const message of messages) {
+            const update = JSON.parse(message);
+
+            if (update.error) {
+              throw new Error(update.error);
+            }
+
+            if (update.step === 1) {
+              updateFileStatus(id, { status: "extracting", progress: 20 });
+            } else if (update.step === 2) {
+              updateFileStatus(id, { status: "uploading", progress: 40 });
+            } else if (update.step === 3) {
+              updateFileStatus(id, { status: "chunking", progress: 60 });
+            } else if (update.step === 4) {
+              updateFileStatus(id, { status: "embedding", progress: 80 });
+            } else if (update.step === 5) {
+              if (update.document) {
+                updateFileStatus(id, {
+                  status: "completed",
+                  progress: 100,
+                  generatedTitle: update.document.name,
+                });
+                toast.success(`Successfully processed ${update.document.name}`);
+                success = true;
+              } else {
+                updateFileStatus(id, { status: "storing", progress: 90 });
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      return success;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       updateFileStatus(id, {
@@ -152,11 +211,6 @@ export function DocumentUpload() {
         await queryClient.invalidateQueries({ queryKey: ["document-graph"] });
         await queryClient.invalidateQueries({ queryKey: ["document-suggestions"] });
       }
-
-      // Remove completed files after a delay
-      setTimeout(() => {
-        setQueuedFiles((prev) => prev.filter((file) => file.status === "error"));
-      }, 2000);
     } catch (error) {
       console.error("Error during parallel upload:", error);
       toast.error("Some files failed to upload. Please check the error messages.");
@@ -169,13 +223,19 @@ export function DocumentUpload() {
         return "from-green-400 to-emerald-500";
       case "error":
         return "from-red-400 to-rose-500";
+      case "extracting":
       case "uploading":
-      case "processing":
+      case "analyzing":
+      case "chunking":
+      case "embedding":
+      case "storing":
         return "from-blue-400 to-indigo-500";
       default:
         return "from-gray-400 to-slate-500";
     }
   };
+
+  const hasCompletedFiles = queuedFiles.some((file) => file.status === "completed");
 
   return (
     <Dialog>
@@ -218,35 +278,59 @@ export function DocumentUpload() {
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium">Files to upload</h3>
-                <Button onClick={uploadAll} disabled={isPending || queuedFiles.every((f) => f.status !== "queued")}>
-                  Upload All
-                </Button>
+                <div className="flex items-center gap-2">
+                  {hasCompletedFiles && (
+                    <Button variant="outline" size="sm" onClick={clearCompleted}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Clear Completed
+                    </Button>
+                  )}
+                  <Button onClick={uploadAll} disabled={isPending || queuedFiles.every((f) => f.status !== "queued")}>
+                    Upload All
+                  </Button>
+                </div>
               </div>
               <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto">
-                {queuedFiles.map(({ file, id, status, progress, error }) => (
+                {queuedFiles.map(({ file, id, status, progress, error, generatedTitle }) => (
                   <div
                     key={id}
-                    className={`group relative bg-gradient-to-r ${getFileCardStyle(status)} px-3 rounded-md shadow-sm h-10 flex items-center overflow-hidden`}
+                    className={`group relative bg-gradient-to-r ${getFileCardStyle(status)} px-3 rounded-md shadow-sm min-h-[40px] flex items-center overflow-hidden`}
                   >
-                    {(status === "uploading" || status === "processing") && (
+                    {status !== "completed" && status !== "error" && (
                       <div
                         className="absolute inset-0 bg-white/20 transition-all duration-300"
                         style={{ width: `${progress}%` }}
                       />
                     )}
-                    <div className="flex items-center gap-2 text-white w-full relative">
-                      <div className="bg-white/20 p-1 rounded">
+                    <div className="flex w-full items-center gap-2 text-white py-2">
+                      <div className="bg-white/20 p-1 rounded shrink-0">
                         <FileText className="h-4 w-4" />
                       </div>
-                      <span className="text-sm font-medium truncate flex-1">{file.name}</span>
-                      {(status === "uploading" || status === "processing") && (
-                        <span className="text-xs text-white/90">
-                          {status === "processing" ? "Processing..." : `${Math.round(progress)}%`}
-                        </span>
-                      )}
-                      {status === "error" && (
-                        <span className="text-xs text-white/90 truncate max-w-[200px]" title={error}>
-                          Error: {error}
+                      <div className="flex-1 w-[300px]">
+                        {status === "completed" && generatedTitle ? (
+                          <div className="space-y-0.5">
+                            <p className="text-xs line-through text-white/70 truncate" title={file.name}>
+                              {file.name}
+                            </p>
+                            <p className="text-sm font-medium truncate" title={generatedTitle}>
+                              {generatedTitle}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-sm font-medium truncate block" title={file.name}>
+                            {file.name}
+                          </span>
+                        )}
+                      </div>
+                      {status !== "queued" && (
+                        <span className="text-xs text-white/90 text-right ">
+                          {status === "error" ? (
+                            <span className="text-xs text-white/90 truncate block" title={error}>
+                              Error: {error}
+                            </span>
+                          ) : (
+                            getStatusMessage(status)
+                          )}
                         </span>
                       )}
                     </div>

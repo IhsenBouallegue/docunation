@@ -35,7 +35,7 @@ export function DocumentDialog({ document, isOpen, onClose }: DocumentDialogProp
   const [documentName, setDocumentName] = useState(document?.name || "");
   const [folder, setFolder] = useState(document?.folder || "");
   const [shelf, setShelf] = useState(document?.shelf || 0);
-  const [selectedTags, setSelectedTags] = useState<string[]>(document?.tags || []);
+  const [selectedTags, setSelectedTags] = useState<string[]>((document?.tags as string[]) || []);
   const [newTag, setNewTag] = useState("");
 
   const { mutate: updateDoc, isPending: isUpdating } = useUpdateDocument();

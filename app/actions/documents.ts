@@ -5,6 +5,7 @@ import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { analyzeDocument } from "@/app/actions/analyse-document";
+import { storeChunkEmbeddings } from "@/app/actions/document-processor";
 import { db } from "@/app/db";
 import { documents } from "@/app/db/schema";
 import type { Document, DocumentResponse, DocumentsResponse } from "@/app/types/document";
@@ -222,21 +223,38 @@ export async function calculateDocumentEmbedding(documentContentHash: string) {
   }
 }
 
-async function storeChunkEmbeddings(documentContentHash: string, content: string) {
+export async function getDocument(id: string): Promise<DocumentResponse> {
   try {
-    const { totalChunks, totalEmbeddings } = await processAndStoreDocument(content, documentContentHash);
+    const [doc] = await db.select().from(documents).where(eq(documents.id, id));
 
-    if (!totalChunks || !totalEmbeddings) {
-      return { success: false, error: "Failed to process and store document" };
+    if (!doc) {
+      return { success: false, error: "Document not found" };
     }
 
-    return { success: true, totalChunks, totalEmbeddings };
+    const url = await generatePresignedUrl(doc.bucketName, doc.objectKey);
+
+    return {
+      success: true,
+      data: {
+        ...doc,
+        url,
+      } as Document,
+    };
   } catch (error) {
-    console.error("Error processing embeddings:", error);
-    return { success: false, error: (error as Error).message };
+    console.error("Error getting document:", error);
+    return { success: false, error: "Failed to get document" };
   }
 }
 
-export async function updateDocumentFolder(documentId: string, folder: string | undefined) {
-  return updateDocument(documentId, { folder });
+export async function updateDocumentFolder(
+  documentId: string,
+  folder?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await db.update(documents).set({ folder }).where(eq(documents.id, documentId));
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating document folder:", error);
+    return { success: false, error: "Failed to update document folder" };
+  }
 }
