@@ -10,7 +10,7 @@ export const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 /**
  * Process a text document and split it into chunks
  */
-export async function processDocument(text: string) {
+export async function chunkDocument(text: string) {
   try {
     // Create a document from the text
     const doc = MDocument.fromText(text);
@@ -36,7 +36,7 @@ export async function processDocument(text: string) {
 /**
  * Generate embeddings for document chunks and store them in PostgreSQL
  */
-export async function generateAndStoreEmbeddings(chunks: { text: string }[], documentId: string) {
+export async function generateAndStoreEmbeddings(chunks: { text: string }[], documentContentHash: string) {
   try {
     // Generate embeddings for the chunks
     const { embeddings } = await embedMany({
@@ -57,7 +57,7 @@ export async function generateAndStoreEmbeddings(chunks: { text: string }[], doc
       vectors: embeddings,
       metadata: chunks.map((chunk) => ({
         text: chunk.text,
-        documentId,
+        documentContentHash,
       })),
     });
 
@@ -86,13 +86,13 @@ export function createPgVectorQueryTool() {
 /**
  * Process a document, generate embeddings, and store them in PostgreSQL
  */
-export async function processAndStoreDocument(text: string, documentId: string) {
+export async function processAndStoreDocument(text: string, documentContentHash: string) {
   try {
     // Process the document
-    const { chunks } = await processDocument(text);
+    const { chunks } = await chunkDocument(text);
 
     // Generate and store embeddings
-    const { totalEmbeddings } = await generateAndStoreEmbeddings(chunks, documentId);
+    const { totalEmbeddings } = await generateAndStoreEmbeddings(chunks, documentContentHash);
 
     return {
       totalChunks: chunks.length,

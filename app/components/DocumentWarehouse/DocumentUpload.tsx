@@ -149,7 +149,8 @@ export function DocumentUpload() {
       // If any upload was successful, invalidate queries
       if (hasSuccessfulUpload) {
         await queryClient.invalidateQueries({ queryKey: ["documents"] });
-        await queryClient.refetchQueries({ queryKey: ["document-graph"] });
+        await queryClient.invalidateQueries({ queryKey: ["document-graph"] });
+        await queryClient.invalidateQueries({ queryKey: ["document-suggestions"] });
       }
 
       // Remove completed files after a delay

@@ -1,70 +1,56 @@
 "use client";
 
-import { getDocumentClusters } from "@/app/actions/document-clusters";
+import { suggestDocumentLocations } from "@/app/actions/organize-documents";
 import { useUpdateDocument } from "@/app/mutations/documents";
+import type { DocumentLocationChange, OrganizationConfig } from "@/app/types/organization";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, FolderInput, Loader2 } from "lucide-react";
+import { ArrowRight, Check, FolderInput, Loader2, Settings2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
-
-interface DocumentCluster {
-  id: string;
-  name: string;
-  documents: Array<{
-    id: string;
-    name: string;
-    currentLocation?: {
-      shelf?: number;
-      folder?: string;
-    };
-    suggestedLocation?: {
-      shelf?: number;
-      folder?: string;
-    };
-  }>;
-}
-
-interface LocationChange {
-  documentId: string;
-  documentName: string;
-  from: { shelf?: number; folder?: string };
-  to: { shelf?: number; folder?: string };
-}
 
 export function DocumentClusters() {
   const queryClient = useQueryClient();
   const { mutate: updateDoc, isPending: isUpdating } = useUpdateDocument();
+  const [showSettings, setShowSettings] = useState(false);
+  const [config, setConfig] = useState<OrganizationConfig>({
+    maxFolders: 4,
+    maxShelves: 2,
+  });
 
   const {
-    data: clusters,
+    data: suggestions,
     isLoading,
     error,
-  } = useQuery<DocumentCluster[]>({
-    queryKey: ["document-clusters"],
+    refetch,
+  } = useQuery<DocumentLocationChange[]>({
+    queryKey: ["document-suggestions", config],
     queryFn: async () => {
-      const result = await getDocumentClusters();
-      if (!result.success || !result.clusters) {
+      const result = await suggestDocumentLocations(config);
+      if (!result.success || !result.suggestions) {
         throw new Error(result.error);
       }
-      return result.clusters;
+      return result.suggestions;
     },
   });
 
-  const handleApplyChange = (change: LocationChange) => {
+  const handleApplyChange = (change: DocumentLocationChange) => {
     updateDoc(
       {
-        documentId: change.documentId,
+        documentId: change.id,
         data: {
-          shelf: change.to.shelf,
-          folder: change.to.folder,
+          shelf: change.suggestedLocation.shelf,
+          folder: change.suggestedLocation.folder,
         },
       },
       {
         onSuccess: () => {
-          toast.success(`Updated location for "${change.documentName}"`);
+          toast.success(`Updated location for "${change.name}"`);
           queryClient.invalidateQueries({ queryKey: ["documents"] });
-          queryClient.invalidateQueries({ queryKey: ["document-clusters"] });
+          queryClient.invalidateQueries({ queryKey: ["document-suggestions"] });
         },
         onError: (error) => {
           toast.error(`Failed to update location: ${error.message}`);
@@ -74,6 +60,8 @@ export function DocumentClusters() {
   };
 
   const handleApplyAll = async () => {
+    if (!changes.length) return;
+
     let successCount = 0;
     let failureCount = 0;
 
@@ -83,10 +71,10 @@ export function DocumentClusters() {
         await new Promise<void>((resolve, reject) => {
           updateDoc(
             {
-              documentId: change.documentId,
+              documentId: change.id,
               data: {
-                shelf: change.to.shelf,
-                folder: change.to.folder,
+                shelf: change.suggestedLocation.shelf,
+                folder: change.suggestedLocation.folder,
               },
             },
             {
@@ -102,7 +90,7 @@ export function DocumentClusters() {
           );
         });
       } catch (error) {
-        console.error(`Failed to update ${change.documentName}:`, error);
+        console.error(`Failed to update ${change.name}:`, error);
       }
     }
 
@@ -111,85 +99,118 @@ export function DocumentClusters() {
       toast.success(`Successfully updated ${successCount} document locations`);
       // Refresh the data
       queryClient.invalidateQueries({ queryKey: ["documents"] });
-      queryClient.invalidateQueries({ queryKey: ["document-clusters"] });
+      queryClient.invalidateQueries({ queryKey: ["document-suggestions"] });
     }
     if (failureCount > 0) {
       toast.error(`Failed to update ${failureCount} document locations`);
     }
   };
 
-  // Calculate suggested changes
-  const changes: LocationChange[] = [];
+  const handleConfigChange = (key: keyof OrganizationConfig, value: string) => {
+    const numValue = Number.parseInt(value, 10);
+    if (Number.isNaN(numValue)) return;
 
-  if (clusters) {
-    for (const [clusterIndex, cluster] of clusters.entries()) {
-      // Determine most common shelf and folder in the cluster
-      const locations = cluster.documents
-        .map((doc) => doc.currentLocation)
-        .filter((loc): loc is NonNullable<typeof loc> => !!loc);
-
-      const shelves = locations.map((loc) => loc.shelf).filter((s): s is number => s !== undefined);
-      const folders = locations.map((loc) => loc.folder).filter((f): f is string => f !== undefined);
-
-      // Calculate suggested location based on cluster
-      const suggestedShelf = shelves.length > 0 ? Math.min(...shelves) : clusterIndex + 1;
-      const suggestedFolder = folders.length > 0 ? folders.sort()[0] : String.fromCharCode(65 + (clusterIndex % 26));
-
-      // Find documents that need to be moved
-      for (const doc of cluster.documents) {
-        const currentLoc = doc.currentLocation || {};
-        if (currentLoc.shelf !== suggestedShelf || currentLoc.folder !== suggestedFolder) {
-          changes.push({
-            documentId: doc.id,
-            documentName: doc.name,
-            from: currentLoc,
-            to: { shelf: suggestedShelf, folder: suggestedFolder },
-          });
-        }
-      }
+    if (key === "maxFolders" && (numValue < 1 || numValue > 26)) {
+      toast.error("Number of folders must be between 1 and 26");
+      return;
     }
-  }
+
+    if (key === "maxShelves" && numValue < 1) {
+      toast.error("Number of shelves must be at least 1");
+      return;
+    }
+
+    setConfig((prev) => ({ ...prev, [key]: numValue }));
+  };
+
+  // Calculate changes from suggestions
+  const changes =
+    suggestions?.filter(
+      (suggestion) =>
+        suggestion.currentLocation?.shelf !== suggestion.suggestedLocation.shelf ||
+        suggestion.currentLocation?.folder !== suggestion.suggestedLocation.folder,
+    ) ?? [];
 
   return (
     <Card className="col-span-2">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Organization Suggestions</CardTitle>
-        {changes.length > 0 && (
-          <Button size="sm" className="gap-2" onClick={handleApplyAll} disabled={isUpdating}>
-            {isUpdating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Applying...
-              </>
-            ) : (
-              <>
-                <FolderInput className="h-4 w-4" />
-                Apply All Changes
-              </>
-            )}
+        <div className="flex items-center gap-2">
+          <Button size="icon" variant="ghost" onClick={() => setShowSettings(!showSettings)}>
+            <Settings2 className="h-4 w-4" />
           </Button>
-        )}
+          {changes.length > 0 && (
+            <Button size="sm" className="gap-2" onClick={handleApplyAll} disabled={isUpdating}>
+              {isUpdating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Applying...
+                </>
+              ) : (
+                <>
+                  <FolderInput className="h-4 w-4" />
+                  Apply All Changes
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
+        {showSettings && (
+          <div className="mb-6 p-4 border rounded-lg space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="maxFolders">Maximum Folders (1-26)</Label>
+                <Input
+                  id="maxFolders"
+                  type="number"
+                  min={1}
+                  max={26}
+                  value={config.maxFolders}
+                  onChange={(e) => handleConfigChange("maxFolders", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="maxShelves">Maximum Shelves (min: 1)</Label>
+                <Input
+                  id="maxShelves"
+                  type="number"
+                  min={1}
+                  value={config.maxShelves}
+                  onChange={(e) => handleConfigChange("maxShelves", e.target.value)}
+                />
+              </div>
+            </div>
+            <Button size="sm" onClick={() => refetch()}>
+              Recalculate Suggestions
+            </Button>
+          </div>
+        )}
         <div className="space-y-6">
-          {changes.length > 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : error ? (
+            <div className="text-center py-8 text-sm text-destructive">
+              Error loading suggestions: {error instanceof Error ? error.message : "Unknown error"}
+            </div>
+          ) : changes.length > 0 ? (
             <div className="space-y-4">
               {changes.map((change) => (
-                <div
-                  key={change.documentId}
-                  className="flex items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg"
-                >
+                <div key={change.id} className="flex items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{change.documentName}</p>
+                    <p className="text-sm font-medium truncate">{change.name}</p>
                     <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
                       <span>
-                        {change.from.shelf && change.from.folder
-                          ? `${change.from.shelf}-${change.from.folder}`
+                        {change.currentLocation?.shelf && change.currentLocation?.folder
+                          ? `${change.currentLocation.shelf}-${change.currentLocation.folder}`
                           : "Unsorted"}
                       </span>
                       <ArrowRight className="h-4 w-4" />
                       <span className="font-medium text-foreground">
-                        {change.to.shelf}-{change.to.folder}
+                        {change.suggestedLocation.shelf}-{change.suggestedLocation.folder}
                       </span>
                     </div>
                   </div>

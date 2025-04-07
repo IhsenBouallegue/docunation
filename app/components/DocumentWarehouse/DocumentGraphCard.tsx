@@ -2,8 +2,9 @@
 
 import { createDocumentGraph } from "@/app/actions/document-graph";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
 interface GraphNode {
@@ -20,39 +21,22 @@ interface GraphLink {
   color?: string;
 }
 
-interface GraphData {
-  nodes: GraphNode[];
-  links: GraphLink[];
-}
-
 export function DocumentGraphCard() {
-  const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const initializeGraph = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        // Get graph data from server
-        const result = await createDocumentGraph();
-        if (!result.success || !result.data) {
-          throw new Error(result.error);
-        }
-
-        setGraphData(result.data);
-      } catch (error) {
-        console.error("Error initializing graph:", error);
-        setError((error as Error).message);
-      } finally {
-        setIsLoading(false);
+  const {
+    data: graphData,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["document-graph"],
+    queryFn: async () => {
+      const result = await createDocumentGraph();
+      if (!result.success || !result.data) {
+        throw new Error(result.error);
       }
-    };
-
-    initializeGraph();
-  }, []);
+      return result.data;
+    },
+    initialData: { nodes: [], links: [] },
+  });
 
   return (
     <Card className="col-span-2">
@@ -61,12 +45,16 @@ export function DocumentGraphCard() {
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div className="flex items-center justify-center">
-            <div className="text-sm text-muted-foreground">Loading document relationships...</div>
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin" />
           </div>
         ) : error ? (
-          <div className="flex items-center justify-center">
-            <div className="text-sm text-destructive">Error: {error}</div>
+          <div className="text-center py-8 text-sm text-destructive">
+            Error: {error instanceof Error ? error.message : "Unknown error"}
+          </div>
+        ) : graphData.nodes.length === 0 ? (
+          <div className="text-center py-8 text-sm text-muted-foreground">
+            No document relationships found. Add more documents to see connections.
           </div>
         ) : (
           <div className="w-full h-auto">

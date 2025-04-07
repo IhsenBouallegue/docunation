@@ -1,6 +1,6 @@
 "use client";
 
-import { useCalculateDocumentEmbedding, useDeleteDocument, useUpdateDocument } from "@/app/mutations/documents";
+import { useDeleteDocument, useUpdateDocument } from "@/app/mutations/documents";
 import type { Document } from "@/app/types/document";
 import {
   AlertDialog,
@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Brain, Download, Loader2, MapPin, Network, Pencil, Plus, Tag, Trash2, X } from "lucide-react";
+import { Download, Loader2, MapPin, Pencil, Plus, Tag, Trash2, X } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
 import { toast } from "sonner";

@@ -1,41 +1,18 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { analyzeDocument } from "@/app/actions/analyse-document";
 import { db } from "@/app/db";
 import { documents } from "@/app/db/schema";
 import type { Document, DocumentResponse, DocumentsResponse } from "@/app/types/document";
 import { generatePresignedUrl, minioClient } from "@/app/utils/minio";
 import { mastra } from "@/mastra";
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
+import { processAndStoreDocument } from "@/mastra/rag";
 import { eq } from "drizzle-orm";
 import { LlamaParseReader } from "llamaindex";
-import { z } from "zod";
-
-// Create an agent for document processing
-const processAgent = new Agent({
-  name: "Document Processor",
-  model: openai("gpt-4-turbo-preview"),
-  instructions: `You are a document processing assistant that analyzes documents and extracts key information.
-  
-  For titles:
-  - Create a clear, descriptive title if none exists
-  - Keep it concise but informative
-  - Include key topic and document type
-  
-  For tags:
-  - Extract 3-5 key topics or themes
-  - Focus on main concepts, not generic terms
-  - Include document type if relevant
-  - Make tags concise (1-3 words)`,
-});
-
-interface ProcessResult {
-  title: string;
-  tags: string[];
-}
 
 export async function getDocuments(): Promise<DocumentsResponse> {
   try {
@@ -60,7 +37,7 @@ export async function getDocuments(): Promise<DocumentsResponse> {
       })),
     );
 
-    return { success: true, data: documentsWithUrls };
+    return { success: true, data: documentsWithUrls as Document[] };
   } catch (error) {
     console.error("Error fetching documents:", error);
     return { success: false, error: "Failed to fetch documents" };
@@ -82,7 +59,7 @@ export async function processDocument(file: {
     const tempPath = join(tmpdir(), file.name);
     await writeFile(tempPath, Buffer.from(buffer));
 
-    const reader = new LlamaParseReader({ resultType: "markdown" });
+    const reader = new LlamaParseReader({ resultType: "text" });
     const parsedDocs = await reader.loadData(tempPath);
     const documentContent = parsedDocs[0];
 
@@ -93,32 +70,33 @@ export async function processDocument(file: {
     // Analyze document content
     const { title, tags } = await analyzeDocument(documentContent.text, file.name, file.type);
 
-    // Save document with MinIO metadata
+    const documentContentHash = createHash("sha256").update(documentContent.text).digest("hex");
+
+    // Process embeddings for chunks
+    const chunkEmneddingsResult = await storeChunkEmbeddings(documentContentHash, documentContent.text);
+    if (!chunkEmneddingsResult.success) {
+      console.error("Error processing chunk embeddings:", chunkEmneddingsResult.error);
+    }
+    // Calculate and save document embedding
+    const documentEmbeddingResult = await calculateDocumentEmbedding(documentContentHash);
+    if (!documentEmbeddingResult.success || !documentEmbeddingResult.embedding) {
+      console.error("Error calculating document embedding:", documentEmbeddingResult.error);
+      return { success: false, error: "Failed to calculate document embedding" };
+    }
+
     const [savedDoc] = await db
       .insert(documents)
       .values({
         name: title || file.name,
         bucketName: file.bucketName,
         objectKey: file.objectKey,
+        embedding: documentEmbeddingResult.embedding,
+        documentContentHash,
         type: file.type,
         content: documentContent.text,
         tags,
-        createdAt: new Date(),
-        updatedAt: new Date(),
       })
       .returning();
-
-    // Process embeddings for chunks
-    const embeddingResult = await processEmbeddings(savedDoc as Document);
-    if (!embeddingResult.success) {
-      console.error("Error processing chunk embeddings:", embeddingResult.error);
-    }
-
-    // Calculate and save document embedding
-    const documentEmbeddingResult = await calculateDocumentEmbedding(savedDoc.id);
-    if (!documentEmbeddingResult.success) {
-      console.error("Error calculating document embedding:", documentEmbeddingResult.error);
-    }
 
     return {
       success: true,
@@ -146,7 +124,7 @@ export async function deleteDocument(documentId: string): Promise<{ success: boo
     const vectorStore = mastra.getVector("pgVector");
     const chunks = await vectorStore.query({
       indexName: "embeddings",
-      filter: { documentId },
+      filter: { documentContentHash: doc.documentContentHash },
       includeVector: true,
       topK: 1000,
       queryVector: Array(1536).fill(0),
@@ -190,7 +168,7 @@ export async function updateDocument(documentId: string, data: Partial<Document>
 
     // If content was updated, reprocess embeddings
     if (data.content) {
-      await processEmbeddings(updatedDoc as Document);
+      await storeChunkEmbeddings(updatedDoc.documentContentHash, data.content);
     }
 
     return {
@@ -203,44 +181,13 @@ export async function updateDocument(documentId: string, data: Partial<Document>
   }
 }
 
-// Get document chunks with embeddings
-export async function getDocumentChunks(docs: Document[]) {
-  try {
-    const vectorStore = mastra.getVector("pgVector");
-    const allChunks = await Promise.all(
-      docs.map(async (doc) => {
-        const results = await vectorStore.query({
-          indexName: "embeddings",
-          filter: { documentId: doc.id },
-          includeVector: true,
-          topK: 1000,
-          queryVector: Array(1536).fill(0),
-        });
-        return results;
-      }),
-    );
-
-    return {
-      success: true,
-      chunks: allChunks.flat().map((chunk) => ({
-        text: chunk.metadata?.text ?? "",
-        metadata: { documentId: chunk.metadata?.documentId },
-        vector: chunk.vector ?? [],
-      })),
-    };
-  } catch (error) {
-    console.error("Error fetching document chunks:", error);
-    return { success: false, error: (error as Error).message };
-  }
-}
-
 // Calculate document embedding
-export async function calculateDocumentEmbedding(documentId: string) {
+export async function calculateDocumentEmbedding(documentContentHash: string) {
   try {
     const vectorStore = mastra.getVector("pgVector");
     const results = await vectorStore.query({
       indexName: "embeddings",
-      filter: { documentId },
+      filter: { documentContentHash },
       includeVector: true,
       topK: 1000,
       queryVector: Array(1536).fill(0),
@@ -251,7 +198,7 @@ export async function calculateDocumentEmbedding(documentId: string) {
     }
 
     const embeddingLength = results[0]?.vector?.length ?? 0;
-    const averageEmbedding = new Array(embeddingLength).fill(0);
+    const averageEmbedding: number[] = new Array(1536).fill(0);
 
     for (const result of results) {
       for (let i = 0; i < embeddingLength; i++) {
@@ -263,16 +210,9 @@ export async function calculateDocumentEmbedding(documentId: string) {
       averageEmbedding[i] /= results.length;
     }
 
-    await db
-      .update(documents)
-      .set({
-        embedding: averageEmbedding,
-        updatedAt: new Date(),
-      })
-      .where(eq(documents.id, documentId));
-
     return {
       success: true,
+      embedding: averageEmbedding,
       chunkCount: results.length,
       embeddingDimension: embeddingLength,
     };
@@ -282,46 +222,15 @@ export async function calculateDocumentEmbedding(documentId: string) {
   }
 }
 
-// Private helper functions
-async function analyzeDocument(content: string, fileName: string, type: string): Promise<ProcessResult> {
-  const prompt = `
-  Analyze this document:
-  Name: ${fileName}
-  Type: ${type}
-  Content: ${content}
-
-  1. Create a clear, descriptive title for this document.
-  2. Extract 3-5 relevant tags that describe the key topics and themes.
-
-  Return the results in this format:
-  TITLE: [your suggested title]
-  TAGS: [tag1], [tag2], [tag3]
-  `;
-
-  const response = await processAgent.generate([{ role: "user", content: prompt }], {
-    output: z.object({
-      title: z.string(),
-      tags: z.array(z.string()),
-    }),
-  });
-
-  return {
-    title: response.object.title,
-    tags: response.object.tags,
-  };
-}
-
-async function processEmbeddings(document: Document) {
+async function storeChunkEmbeddings(documentContentHash: string, content: string) {
   try {
-    const { start } = await mastra.getWorkflow("documentProcessingWorkflow").createRun();
-    await start({
-      triggerData: {
-        text: document.content,
-        documentId: document.id,
-      },
-    });
+    const { totalChunks, totalEmbeddings } = await processAndStoreDocument(content, documentContentHash);
 
-    return { success: true };
+    if (!totalChunks || !totalEmbeddings) {
+      return { success: false, error: "Failed to process and store document" };
+    }
+
+    return { success: true, totalChunks, totalEmbeddings };
   } catch (error) {
     console.error("Error processing embeddings:", error);
     return { success: false, error: (error as Error).message };

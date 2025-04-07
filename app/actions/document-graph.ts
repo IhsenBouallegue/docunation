@@ -34,7 +34,14 @@ export async function createDocumentGraph(): Promise<{ success: boolean; data?: 
     );
 
     if (docsWithEmbeddings.length === 0) {
-      return { success: false, error: "No documents with embeddings found" };
+      // Return empty graph data instead of error when no documents with embeddings are found
+      return {
+        success: true,
+        data: {
+          nodes: [],
+          links: [],
+        },
+      };
     }
 
     // Initialize GraphRAG

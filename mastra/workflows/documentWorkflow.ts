@@ -10,19 +10,19 @@ const processDocumentStep = new Step({
   description: "Process a document and store it in the vector database",
   inputSchema: z.object({
     text: z.string().describe("The text content of the document"),
-    documentId: z.string().describe("The ID of the document"),
+    documentContentHash: z.string().describe("The hash of the document content"),
   }),
   execute: async ({ context }) => {
-    const triggerData = context?.getStepResult<{ text: string; documentId: string }>("trigger");
+    const triggerData = context?.getStepResult<{ text: string; documentContentHash: string }>("trigger");
 
     if (!triggerData) {
       throw new Error("Trigger data not found");
     }
 
-    const { text, documentId } = triggerData;
+    const { text, documentContentHash } = triggerData;
 
     // Process and store the document
-    const result = await processAndStoreDocument(text, documentId);
+    const result = await processAndStoreDocument(text, documentContentHash);
 
     return {
       totalChunks: result.totalChunks,
@@ -31,6 +31,19 @@ const processDocumentStep = new Step({
     };
   },
 });
+
+// Document processing workflow
+export const documentProcessingWorkflow = new Workflow({
+  name: "document-processing-workflow",
+  triggerSchema: z.object({
+    text: z.string().describe("The text content of the document"),
+    documentContentHash: z.string().describe("The hash of the document content"),
+  }),
+}).step(processDocumentStep);
+
+documentProcessingWorkflow.commit();
+
+// ================================================
 
 // Step to query documents
 const queryDocumentStep = new Step({
@@ -66,15 +79,6 @@ const queryDocumentStep = new Step({
   },
 });
 
-// Document processing workflow
-export const documentProcessingWorkflow = new Workflow({
-  name: "document-processing-workflow",
-  triggerSchema: z.object({
-    text: z.string().describe("The text content of the document"),
-    documentId: z.string().describe("The ID of the document"),
-  }),
-}).step(processDocumentStep);
-
 // Document querying workflow
 export const documentQueryWorkflow = new Workflow({
   name: "document-query-workflow",
@@ -84,5 +88,4 @@ export const documentQueryWorkflow = new Workflow({
 }).step(queryDocumentStep);
 
 // Commit the workflows
-documentProcessingWorkflow.commit();
 documentQueryWorkflow.commit();
