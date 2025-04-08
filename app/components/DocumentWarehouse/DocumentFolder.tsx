@@ -3,9 +3,11 @@
 import type { Document } from "@/app/types/document";
 import { Droppable } from "@hello-pangea/dnd";
 import { AnimatePresence, motion } from "framer-motion";
-import { Folder } from "lucide-react";
+import { ChevronRight, Folder } from "lucide-react";
 import { useState } from "react";
 import { CompactDocumentCard } from "./CompactDocumentCard";
+
+const NUM_DOCUMENTS_TO_SHOW = 3;
 
 interface DocumentFolderProps {
   title: string;
@@ -14,7 +16,6 @@ interface DocumentFolderProps {
   folderName: string;
   onDocumentDeleted: () => void;
 }
-
 export function DocumentFolder({ title, documents, shelfNumber, folderName, onDocumentDeleted }: DocumentFolderProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -34,6 +35,11 @@ export function DocumentFolder({ title, documents, shelfNumber, folderName, onDo
           }
         }}
       >
+        {documents.length > NUM_DOCUMENTS_TO_SHOW && (
+          <ChevronRight
+            className={`h-4 w-4 text-slate-600 transition-transform duration-300 ${isExpanded ? "rotate-90" : ""}`}
+          />
+        )}
         <Folder className="h-4 w-4 text-slate-600" />
         <span className="text-sm font-medium text-slate-600">{title}</span>
         <div className="flex items-center justify-center bg-slate-100 text-slate-600 text-xs font-medium rounded-full h-5 w-5">
@@ -60,7 +66,7 @@ export function DocumentFolder({ title, documents, shelfNumber, folderName, onDo
             >
               <div className="space-y-2">
                 <AnimatePresence initial={false}>
-                  {documents.slice(0, isExpanded ? documents.length : 2).map((doc, index) => (
+                  {documents.slice(0, isExpanded ? documents.length : NUM_DOCUMENTS_TO_SHOW).map((doc, index) => (
                     <CompactDocumentCard key={doc.id} document={doc} index={index} onDelete={onDocumentDeleted} />
                   ))}
                 </AnimatePresence>
