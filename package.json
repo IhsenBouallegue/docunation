@@ -11,7 +11,6 @@
     "mastra:build": "mastra build",
     "test:rag": "tsx src/test-document-rag.ts"
   },
-  "packageManager": "bun@1.2.5",
   "engines": {
     "node": "23.6.1"
   },
