@@ -1,8 +1,5 @@
 "use server";
 
-import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { analyzeDocument } from "@/app/actions/analyse-document";
 import { calculateDocumentEmbedding } from "@/app/actions/documents";
@@ -12,12 +9,6 @@ import type { Document } from "@/app/types/document";
 import { generatePresignedUrl, uploadFile } from "@/app/utils/minio";
 import { processAndStoreDocument } from "@/mastra/rag";
 import { LlamaParseReader } from "llamaindex";
-
-interface DocumentContent {
-  text: string;
-  title: string;
-  tags: string[];
-}
 
 interface ProcessingStep<T> {
   success: boolean;
@@ -37,8 +28,8 @@ async function getDocumentContent(file: File): Promise<ProcessingStep<{ content:
   try {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const tempPath = join(tmpdir(), file.name);
-    await writeFile(tempPath, buffer);
+    const tempPath = join(import.meta.dir, file.name);
+    await Bun.write(tempPath, buffer);
 
     const reader = new LlamaParseReader({ resultType: "text" });
     const parsedDocs = await reader.loadData(tempPath);
@@ -92,7 +83,9 @@ async function uploadDocumentWithMetadata(
 // Step 3: Process document chunks and store embeddings
 async function processDocumentChunks(content: string): Promise<ProcessingStep<{ contentHash: string }>> {
   try {
-    const contentHash = createHash("sha256").update(content).digest("hex");
+    const hasher = new Bun.CryptoHasher("sha256");
+    hasher.update(content);
+    const contentHash = hasher.digest("hex");
     const result = await storeChunkEmbeddings(contentHash, content);
 
     if (!result.success) {
