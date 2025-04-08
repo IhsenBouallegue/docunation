@@ -12,7 +12,7 @@
     "test:rag": "tsx src/test-document-rag.ts"
   },
   "engines": {
-    "node": ">=23.0.0"
+    "node": "23"
   },
   "keywords": [],
   "author": "",
