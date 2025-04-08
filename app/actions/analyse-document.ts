@@ -1,7 +1,7 @@
 "use server";
 
 import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 import { z } from "zod";
 
 // Create an agent for document processing
