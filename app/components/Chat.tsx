@@ -10,8 +10,8 @@ import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
+import { v4 as uuidv4 } from "uuid";
 import CodeDisplayBlock from "../components/code-display-block";
-
 const ChatAiIcons = [
   {
     icon: CopyIcon,
@@ -58,7 +58,7 @@ export default function Chat() {
     if (!input.trim() || isGenerating) return;
 
     const userMessage: Message = {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       role: "user",
       content: input.trim(),
       timestamp: new Date(),
@@ -73,7 +73,7 @@ export default function Chat() {
 
       if (response.success && response.message) {
         const assistantMessage: Message = {
-          id: crypto.randomUUID(),
+          id: uuidv4(),
           role: "assistant",
           content: response.message,
           timestamp: new Date(),

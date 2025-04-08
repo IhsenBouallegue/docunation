@@ -1,19 +1,12 @@
 "use server";
 
-import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { analyzeDocument } from "@/app/actions/analyse-document";
 import { storeChunkEmbeddings } from "@/app/actions/document-processor";
 import { db } from "@/app/db";
 import { documents } from "@/app/db/schema";
 import type { Document, DocumentResponse, DocumentsResponse } from "@/app/types/document";
 import { generatePresignedUrl, minioClient } from "@/app/utils/minio";
 import { mastra } from "@/mastra";
-import { processAndStoreDocument } from "@/mastra/rag";
 import { eq } from "drizzle-orm";
-import { LlamaParseReader } from "llamaindex";
 
 export async function getDocuments(): Promise<DocumentsResponse> {
   try {
@@ -42,73 +35,6 @@ export async function getDocuments(): Promise<DocumentsResponse> {
   } catch (error) {
     console.error("Error fetching documents:", error);
     return { success: false, error: "Failed to fetch documents" };
-  }
-}
-
-// Process and store a new document
-export async function processDocument(file: {
-  name: string;
-  bucketName: string;
-  objectKey: string;
-  type: string;
-}): Promise<DocumentResponse> {
-  try {
-    // Fetch and parse document
-    const url = await generatePresignedUrl(file.bucketName, file.objectKey);
-    const response = await fetch(url);
-    const buffer = await response.arrayBuffer();
-    const tempPath = join(tmpdir(), file.name);
-    await writeFile(tempPath, Buffer.from(buffer));
-
-    const reader = new LlamaParseReader({ resultType: "text" });
-    const parsedDocs = await reader.loadData(tempPath);
-    const documentContent = parsedDocs[0];
-
-    if (!documentContent) {
-      return { success: false, error: "No content found in document" };
-    }
-
-    // Analyze document content
-    const { title, tags } = await analyzeDocument(documentContent.text, file.name, file.type);
-
-    const documentContentHash = createHash("sha256").update(documentContent.text).digest("hex");
-
-    // Process embeddings for chunks
-    const chunkEmneddingsResult = await storeChunkEmbeddings(documentContentHash, documentContent.text);
-    if (!chunkEmneddingsResult.success) {
-      console.error("Error processing chunk embeddings:", chunkEmneddingsResult.error);
-    }
-    // Calculate and save document embedding
-    const documentEmbeddingResult = await calculateDocumentEmbedding(documentContentHash);
-    if (!documentEmbeddingResult.success || !documentEmbeddingResult.embedding) {
-      console.error("Error calculating document embedding:", documentEmbeddingResult.error);
-      return { success: false, error: "Failed to calculate document embedding" };
-    }
-
-    const [savedDoc] = await db
-      .insert(documents)
-      .values({
-        name: title || file.name,
-        bucketName: file.bucketName,
-        objectKey: file.objectKey,
-        embedding: documentEmbeddingResult.embedding,
-        documentContentHash,
-        type: file.type,
-        content: documentContent.text,
-        tags,
-      })
-      .returning();
-
-    return {
-      success: true,
-      data: {
-        ...savedDoc,
-        url: url, // Add the presigned URL for immediate use
-      } as Document,
-    };
-  } catch (error) {
-    console.error("Error processing document:", error);
-    return { success: false, error: "Failed to process document" };
   }
 }
 
@@ -220,29 +146,6 @@ export async function calculateDocumentEmbedding(documentContentHash: string) {
   } catch (error) {
     console.error("Error calculating document embedding:", error);
     return { success: false, error: (error as Error).message };
-  }
-}
-
-export async function getDocument(id: string): Promise<DocumentResponse> {
-  try {
-    const [doc] = await db.select().from(documents).where(eq(documents.id, id));
-
-    if (!doc) {
-      return { success: false, error: "Document not found" };
-    }
-
-    const url = await generatePresignedUrl(doc.bucketName, doc.objectKey);
-
-    return {
-      success: true,
-      data: {
-        ...doc,
-        url,
-      } as Document,
-    };
-  } catch (error) {
-    console.error("Error getting document:", error);
-    return { success: false, error: "Failed to get document" };
   }
 }
 

@@ -1,6 +1,5 @@
 "use client";
 
-import type { Document } from "@/app/types/document";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +13,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { FileText, Trash2, Upload, X } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { v4 as uuidv4 } from "uuid";
 
 interface QueuedFile {
   file: File;
@@ -62,7 +62,7 @@ export function DocumentUpload() {
     // Add files to queue with unique IDs
     const newQueuedFiles = Array.from(files).map((file) => ({
       file,
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       status: "queued" as const,
       progress: 0,
     }));
