@@ -11,6 +11,9 @@
     "mastra:build": "mastra build",
     "test:rag": "tsx src/test-document-rag.ts"
   },
+  "engines": {
+    "node": ">=23.0.0"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",

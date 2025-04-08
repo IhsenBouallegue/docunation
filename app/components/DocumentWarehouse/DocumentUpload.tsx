@@ -285,7 +285,11 @@ export function DocumentUpload() {
                       Clear Completed
                     </Button>
                   )}
-                  <Button onClick={uploadAll} disabled={isPending || queuedFiles.every((f) => f.status !== "queued")}>
+                  <Button
+                    onClick={uploadAll}
+                    className="cursor-pointer"
+                    disabled={isPending || queuedFiles.every((f) => f.status !== "queued")}
+                  >
                     Upload All
                   </Button>
                 </div>
