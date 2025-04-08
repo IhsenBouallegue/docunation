@@ -111,18 +111,22 @@ export function DocumentUpload() {
 
   const processFile = async (queuedFile: QueuedFile) => {
     const { file, id } = queuedFile;
+    console.log(`[Upload] Starting to process file: ${file.name} (${file.size} bytes)`);
 
     try {
       // Create FormData and append file
       const formData = new FormData();
       formData.append("file", file);
+      console.log(`[Upload] Created FormData for file: ${file.name}`);
 
       // Start streaming process
+      console.log("[Upload] Initiating fetch request to /api/documents/process");
       const response = await fetch("/api/documents/process", {
         method: "POST",
         body: formData,
       });
 
+      console.log(`[Upload] Server response status: ${response.status}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -131,6 +135,7 @@ export function DocumentUpload() {
       if (!reader) {
         throw new Error("Failed to start document processing");
       }
+      console.log("[Upload] Successfully created stream reader");
 
       const decoder = new TextDecoder();
       let success = false;
@@ -139,29 +144,40 @@ export function DocumentUpload() {
         while (true) {
           const { done, value } = await reader.read();
 
-          if (done) break;
+          if (done) {
+            console.log(`[Upload] Stream completed for file: ${file.name}`);
+            break;
+          }
 
           // Process all complete JSON messages in this chunk
           const chunk = decoder.decode(value, { stream: true });
           const messages = chunk.split("\n").filter(Boolean);
+          console.log(`[Upload] Received ${messages.length} messages from stream`);
 
           for (const message of messages) {
             const update = JSON.parse(message);
+            console.log("[Upload] Processing update:", update);
 
             if (update.error) {
+              console.error("[Upload] Error in stream:", update.error);
               throw new Error(update.error);
             }
 
             if (update.step === 1) {
               updateFileStatus(id, { status: "extracting", progress: 20 });
+              console.log("[Upload] Step 1: Extracting content");
             } else if (update.step === 2) {
               updateFileStatus(id, { status: "uploading", progress: 40 });
+              console.log("[Upload] Step 2: Uploading document");
             } else if (update.step === 3) {
               updateFileStatus(id, { status: "chunking", progress: 60 });
+              console.log("[Upload] Step 3: Processing chunks");
             } else if (update.step === 4) {
               updateFileStatus(id, { status: "embedding", progress: 80 });
+              console.log("[Upload] Step 4: Generating embeddings");
             } else if (update.step === 5) {
               if (update.document) {
+                console.log("[Upload] Step 5: Document processed successfully:", update.document.name);
                 updateFileStatus(id, {
                   status: "completed",
                   progress: 100,
@@ -170,6 +186,7 @@ export function DocumentUpload() {
                 toast.success(`Successfully processed ${update.document.name}`);
                 success = true;
               } else {
+                console.log("[Upload] Step 5: Storing document");
                 updateFileStatus(id, { status: "storing", progress: 90 });
               }
             }
@@ -177,11 +194,13 @@ export function DocumentUpload() {
         }
       } finally {
         reader.releaseLock();
+        console.log(`[Upload] Released stream reader for file: ${file.name}`);
       }
 
       return success;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[Upload] Error processing file ${file.name}:`, error);
       updateFileStatus(id, {
         status: "error",
         progress: 0,

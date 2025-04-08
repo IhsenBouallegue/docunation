@@ -1,5 +1,8 @@
 "use server";
 
+import { createHash } from "node:crypto";
+import { writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { analyzeDocument } from "@/app/actions/analyse-document";
 import { calculateDocumentEmbedding } from "@/app/actions/documents";
@@ -28,8 +31,8 @@ async function getDocumentContent(file: File): Promise<ProcessingStep<{ content:
   try {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const tempPath = join(import.meta.dir, file.name);
-    await Bun.write(tempPath, buffer);
+    const tempPath = join(tmpdir(), file.name);
+    await writeFile(tempPath, buffer);
 
     const reader = new LlamaParseReader({ resultType: "text" });
     const parsedDocs = await reader.loadData(tempPath);
@@ -83,9 +86,7 @@ async function uploadDocumentWithMetadata(
 // Step 3: Process document chunks and store embeddings
 async function processDocumentChunks(content: string): Promise<ProcessingStep<{ contentHash: string }>> {
   try {
-    const hasher = new Bun.CryptoHasher("sha256");
-    hasher.update(content);
-    const contentHash = hasher.digest("hex");
+    const contentHash = createHash("sha256").update(content).digest("hex");
     const result = await storeChunkEmbeddings(contentHash, content);
 
     if (!result.success) {
@@ -182,59 +183,74 @@ export async function processDocumentStream(formData: FormData): Promise<Respons
     new ReadableStream({
       async start(controller) {
         const sendUpdate = (update: StreamUpdate) => {
-          // Send the update as a JSON string with a newline delimiter
+          console.log("[Server] Sending update:", update);
           controller.enqueue(new TextEncoder().encode(`${JSON.stringify(update)}\n`));
         };
 
         try {
           const file = formData.get("file") as File;
           if (!file) {
+            console.error("[Server] No file provided in form data");
             sendUpdate({ error: "No file provided" });
             controller.close();
             return;
           }
+          console.log("[Server] Processing file:", file.name, "Size:", file.size, "Type:", file.type);
 
           // Step 1: Get document content
+          console.log("[Server] Step 1: Starting content extraction");
           sendUpdate({ step: 1, message: "Extracting document content" });
           const contentStep = await getDocumentContent(file);
           if (!contentStep.success || !contentStep.data) {
+            console.error("[Server] Content extraction failed:", contentStep.error);
             sendUpdate({ step: 1, error: contentStep.error });
             controller.close();
             return;
           }
+          console.log("[Server] Content extraction completed successfully");
           sendUpdate({ step: 1, message: "Document content extracted" });
 
           // Step 2: Upload document with metadata
+          console.log("[Server] Step 2: Starting document upload");
           sendUpdate({ step: 2, message: "Uploading document" });
           const uploadStep = await uploadDocumentWithMetadata(file, contentStep.data.buffer, contentStep.data.content);
           if (!uploadStep.success || !uploadStep.data) {
+            console.error("[Server] Document upload failed:", uploadStep.error);
             sendUpdate({ step: 2, error: uploadStep.error });
             controller.close();
             return;
           }
+          console.log("[Server] Document upload completed successfully");
           sendUpdate({ step: 2, message: "Document uploaded" });
 
           // Step 3: Process document chunks and store embeddings
+          console.log("[Server] Step 3: Starting chunk processing");
           sendUpdate({ step: 3, message: "Processing document chunks" });
           const chunksStep = await processDocumentChunks(contentStep.data.content);
           if (!chunksStep.success || !chunksStep.data) {
+            console.error("[Server] Chunk processing failed:", chunksStep.error);
             sendUpdate({ step: 3, error: chunksStep.error });
             controller.close();
             return;
           }
+          console.log("[Server] Chunk processing completed successfully");
           sendUpdate({ step: 3, message: "Document chunks processed" });
 
           // Step 4: Generate document embedding
+          console.log("[Server] Step 4: Starting embedding generation");
           sendUpdate({ step: 4, message: "Generating document embedding" });
           const embeddingStep = await generateDocumentEmbedding(chunksStep.data.contentHash);
           if (!embeddingStep.success || !embeddingStep.data) {
+            console.error("[Server] Embedding generation failed:", embeddingStep.error);
             sendUpdate({ step: 4, error: embeddingStep.error });
             controller.close();
             return;
           }
+          console.log("[Server] Embedding generation completed successfully");
           sendUpdate({ step: 4, message: "Document embedding generated" });
 
           // Step 5: Store document in the database
+          console.log("[Server] Step 5: Starting document storage");
           sendUpdate({ step: 5, message: "Storing document in database" });
           const storeStep = await storeDocument({
             name: uploadStep.data.title,
@@ -247,12 +263,15 @@ export async function processDocumentStream(formData: FormData): Promise<Respons
             tags: uploadStep.data.tags,
           });
           if (!storeStep.success || !storeStep.data) {
+            console.error("[Server] Document storage failed:", storeStep.error);
             sendUpdate({ step: 5, error: storeStep.error });
             controller.close();
             return;
           }
+          console.log("[Server] Document storage completed successfully");
           sendUpdate({ step: 5, message: "Document stored successfully", document: storeStep.data });
         } catch (error) {
+          console.error("[Server] Unexpected error during document processing:", error);
           sendUpdate({ error: error instanceof Error ? error.message : "Unknown error" });
         }
         controller.close();
