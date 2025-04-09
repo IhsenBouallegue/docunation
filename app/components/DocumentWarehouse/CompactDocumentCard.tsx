@@ -1,8 +1,10 @@
 import { deleteDocument } from "@/app/actions/documents";
 import { DocumentDialog } from "@/app/components/DocumentWarehouse/DocumentDialog";
+import { useDeleteDocument } from "@/app/mutations/documents";
 import type { Document } from "@/app/types/document";
 import { Button } from "@/components/ui/button";
 import { Draggable } from "@hello-pangea/dnd";
+import { useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { FileArchive, FileImage, FileText, FileType, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -37,6 +39,8 @@ const gradients = [
 
 // Get deterministic color based on document id
 function getGradient(id: string): string {
+  console.log("id", id);
+  if (!id) return gradients[0];
   // Create a simple hash of the id
   const hash = id.split("").reduce((acc, char) => {
     return char.charCodeAt(0) + ((acc << 5) - acc);
@@ -50,12 +54,10 @@ function getGradient(id: string): string {
 interface CompactDocumentCardProps {
   document: Document;
   index: number;
-  onDelete?: () => void;
 }
 
-export function CompactDocumentCard({ document, index, onDelete }: CompactDocumentCardProps) {
+export function CompactDocumentCard({ document, index }: CompactDocumentCardProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // Determine document type icon
   const type = document.type.startsWith("application/pdf")
@@ -66,26 +68,7 @@ export function CompactDocumentCard({ document, index, onDelete }: CompactDocume
         ? "text"
         : "other";
 
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent opening the dialog
-    if (isDeleting) return;
-
-    try {
-      setIsDeleting(true);
-      const result = await deleteDocument(document.id);
-
-      if (result.success) {
-        toast.success("Document deleted successfully");
-        onDelete?.();
-      } else {
-        toast.error(`Failed to delete document: ${result.error}`);
-      }
-    } catch (error) {
-      toast.error(`Error deleting document: ${error instanceof Error ? error.message : "Unknown error"}`);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
+  const { mutate: deleteDocument, isPending: isDeleting } = useDeleteDocument();
 
   return (
     <>
@@ -99,11 +82,12 @@ export function CompactDocumentCard({ document, index, onDelete }: CompactDocume
               exit={{ opacity: 0, height: 0 }}
               className={`
                 group relative
-                bg-gradient-to-r ${getGradient(document.id)}
+                bg-gradient-to-r ${getGradient(document.documentContentHash)}
                 px-3 rounded-md shadow-sm
                 cursor-pointer hover:shadow-md transition-shadow
                 flex items-center
                 ${snapshot.isDragging ? "opacity-50" : ""}
+                ${isDeleting ? "animate-pulse duration-1000" : ""}
               `}
               transition={{
                 duration: 0.2,
@@ -124,8 +108,11 @@ export function CompactDocumentCard({ document, index, onDelete }: CompactDocume
               <Button
                 variant="destructive"
                 size="icon"
-                className="absolute right-1 opacity-0 group-hover:opacity-100 transition-opacity size-6 "
-                onClick={handleDelete}
+                className="absolute right-1 opacity-0 group-hover:opacity-100 transition-opacity size-6"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteDocument(document.id);
+                }}
                 disabled={isDeleting}
               >
                 <Trash2 className="size-3" />

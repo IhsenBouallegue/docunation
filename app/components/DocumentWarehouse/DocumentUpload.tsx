@@ -1,5 +1,6 @@
 "use client";
 
+import type { Job } from "@/app/services/job-tracker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,21 +12,21 @@ import {
 } from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileText, Trash2, Upload, X } from "lucide-react";
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
 
 interface QueuedFile {
   file: File;
   id: string;
+  jobId?: string;
   status:
     | "queued"
-    | "extracting"
-    | "uploading"
-    | "analyzing"
-    | "chunking"
-    | "embedding"
-    | "storing"
+    | "extracting_content"
+    | "uploading_document"
+    | "processing_chunks"
+    | "generating_embedding"
+    | "storing_document"
     | "completed"
     | "error";
   progress: number;
@@ -50,7 +51,6 @@ async function processFilesInChunks(
 }
 
 export function DocumentUpload() {
-  const [isPending, startTransition] = useTransition();
   const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
@@ -88,17 +88,15 @@ export function DocumentUpload() {
 
   const getStatusMessage = (status: QueuedFile["status"]) => {
     switch (status) {
-      case "extracting":
+      case "extracting_content":
         return "Extracting content...";
-      case "uploading":
-        return "Uploading...";
-      case "analyzing":
-        return "Analyzing document...";
-      case "chunking":
+      case "uploading_document":
+        return "Uploading document...";
+      case "processing_chunks":
         return "Processing chunks...";
-      case "embedding":
+      case "generating_embedding":
         return "Generating embeddings...";
-      case "storing":
+      case "storing_document":
         return "Storing document...";
       case "completed":
         return "Completed";
@@ -117,97 +115,78 @@ export function DocumentUpload() {
       // Create FormData and append file
       const formData = new FormData();
       formData.append("file", file);
-      console.log(`[Upload] Created FormData for file: ${file.name}`);
 
-      // Start streaming process
-      console.log("[Upload] Initiating fetch request to /api/documents/process");
+      // Start upload and get job ID
       const response = await fetch("/api/documents/process", {
         method: "POST",
         body: formData,
       });
 
-      console.log(`[Upload] Server response status: ${response.status}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("Failed to start document processing");
-      }
-      console.log("[Upload] Successfully created stream reader");
-
-      const decoder = new TextDecoder();
-      let success = false;
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            console.log(`[Upload] Stream completed for file: ${file.name}`);
-            break;
-          }
-
-          // Process all complete JSON messages in this chunk
-          const chunk = decoder.decode(value, { stream: true });
-          const messages = chunk.split("\n").filter(Boolean);
-          console.log(`[Upload] Received ${messages.length} messages from stream`);
-
-          for (const message of messages) {
-            const update = JSON.parse(message);
-            console.log("[Upload] Processing update:", update);
-
-            if (update.error) {
-              console.error("[Upload] Error in stream:", update.error);
-              throw new Error(update.error);
-            }
-
-            if (update.step === 1) {
-              updateFileStatus(id, { status: "extracting", progress: 20 });
-              console.log("[Upload] Step 1: Extracting content");
-            } else if (update.step === 2) {
-              updateFileStatus(id, { status: "uploading", progress: 40 });
-              console.log("[Upload] Step 2: Uploading document");
-            } else if (update.step === 3) {
-              updateFileStatus(id, { status: "chunking", progress: 60 });
-              console.log("[Upload] Step 3: Processing chunks");
-            } else if (update.step === 4) {
-              updateFileStatus(id, { status: "embedding", progress: 80 });
-              console.log("[Upload] Step 4: Generating embeddings");
-            } else if (update.step === 5) {
-              if (update.document) {
-                console.log("[Upload] Step 5: Document processed successfully:", update.document.name);
-                updateFileStatus(id, {
-                  status: "completed",
-                  progress: 100,
-                  generatedTitle: update.document.name,
-                });
-                toast.success(`Successfully processed ${update.document.name}`);
-                success = true;
-              } else {
-                console.log("[Upload] Step 5: Storing document");
-                updateFileStatus(id, { status: "storing", progress: 90 });
-              }
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-        console.log(`[Upload] Released stream reader for file: ${file.name}`);
+      const { jobId } = await response.json();
+      if (!jobId) {
+        throw new Error("No job ID received");
       }
 
-      return success;
+      // Update file with job ID
+      updateFileStatus(id, { jobId, status: "queued", progress: 0 });
+
+      // Create EventSource for job progress
+      const eventSource = new EventSource(`/api/jobs/${jobId}/progress`);
+
+      return new Promise<void>((resolve, reject) => {
+        eventSource.onmessage = (event) => {
+          const job = JSON.parse(event.data) as Job;
+
+          if (job.status === "completed") {
+            updateFileStatus(id, {
+              status: "completed",
+              progress: 100,
+              generatedTitle: job.result?.name,
+            });
+            toast.success(`Successfully processed ${job.result?.name || file.name}`);
+            eventSource.close();
+            resolve();
+          } else if (job.status === "error") {
+            updateFileStatus(id, {
+              status: "error",
+              progress: 0,
+              error: "Error",
+            });
+            toast.error(`Failed to process ${file.name}: ${job.error}`);
+            eventSource.close();
+            reject(new Error(job.error));
+          } else {
+            // Update status and progress for all other states
+            updateFileStatus(id, {
+              status: job.status,
+              progress: job.progress,
+            });
+          }
+        };
+
+        eventSource.onerror = () => {
+          eventSource.close();
+          const error = "EventSource connection failed";
+          updateFileStatus(id, {
+            status: "error",
+            progress: 0,
+            error,
+          });
+          reject(new Error(error));
+        };
+      });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
       console.error(`[Upload] Error processing file ${file.name}:`, error);
       updateFileStatus(id, {
         status: "error",
         progress: 0,
-        error: errorMessage,
+        error: "Error",
       });
-      toast.error(`Upload failed: ${errorMessage}`);
-      return false;
+      throw error;
     }
   };
 
@@ -218,9 +197,11 @@ export function DocumentUpload() {
     try {
       // Process files in chunks of 5
       await processFilesInChunks(files, 5, async (file) => {
-        const success = await processFile(file);
-        if (success) {
+        try {
+          await processFile(file);
           hasSuccessfulUpload = true;
+        } catch (error) {
+          console.error("Error processing file:", error);
         }
       });
 
@@ -242,12 +223,11 @@ export function DocumentUpload() {
         return "from-green-400 to-emerald-500";
       case "error":
         return "from-red-400 to-rose-500";
-      case "extracting":
-      case "uploading":
-      case "analyzing":
-      case "chunking":
-      case "embedding":
-      case "storing":
+      case "extracting_content":
+      case "uploading_document":
+      case "processing_chunks":
+      case "generating_embedding":
+      case "storing_document":
         return "from-blue-400 to-indigo-500";
       default:
         return "from-gray-400 to-slate-500";
@@ -307,7 +287,7 @@ export function DocumentUpload() {
                   <Button
                     onClick={uploadAll}
                     className="cursor-pointer"
-                    disabled={isPending || queuedFiles.every((f) => f.status !== "queued")}
+                    disabled={queuedFiles.every((f) => f.status !== "queued")}
                   >
                     Upload All
                   </Button>

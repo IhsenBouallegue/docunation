@@ -7,10 +7,9 @@ import { CompactDocumentCard } from "./CompactDocumentCard";
 
 interface UnsortedDocumentTrayProps {
   documents: Document[];
-  onDocumentDeleted: () => void;
 }
 
-export function UnsortedDocumentTray({ documents, onDocumentDeleted }: UnsortedDocumentTrayProps) {
+export function UnsortedDocumentTray({ documents }: UnsortedDocumentTrayProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (documents.length === 0) return null;
@@ -44,7 +43,7 @@ export function UnsortedDocumentTray({ documents, onDocumentDeleted }: UnsortedD
           >
             <AnimatePresence initial={false}>
               {documents.slice(0, isExpanded ? documents.length : 2).map((doc, index) => (
-                <CompactDocumentCard key={doc.id} document={doc} index={index} onDelete={onDocumentDeleted} />
+                <CompactDocumentCard key={doc.id} document={doc} index={index} />
               ))}
             </AnimatePresence>
             {provided.placeholder}

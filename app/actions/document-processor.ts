@@ -8,6 +8,7 @@ import { analyzeDocument } from "@/app/actions/analyse-document";
 import { calculateDocumentEmbedding } from "@/app/actions/documents";
 import { db } from "@/app/db";
 import { documents } from "@/app/db/schema";
+import { jobTracker } from "@/app/services/job-tracker";
 import type { Document } from "@/app/types/document";
 import { generatePresignedUrl, uploadFile } from "@/app/utils/minio";
 import { processAndStoreDocument } from "@/mastra/rag";
@@ -178,107 +179,87 @@ export async function storeChunkEmbeddings(documentContentHash: string, content:
   }
 }
 
-export async function processDocumentStream(formData: FormData): Promise<Response> {
-  return new Response(
-    new ReadableStream({
-      async start(controller) {
-        const sendUpdate = (update: StreamUpdate) => {
-          console.log("[Server] Sending update:", update);
-          controller.enqueue(new TextEncoder().encode(`${JSON.stringify(update)}\n`));
-        };
+export async function processDocumentStream(formData: FormData, jobId: string): Promise<void> {
+  const file = formData.get("file") as File;
+  if (!file) {
+    throw new Error("No file provided");
+  }
 
-        try {
-          const file = formData.get("file") as File;
-          if (!file) {
-            console.error("[Server] No file provided in form data");
-            sendUpdate({ error: "No file provided" });
-            controller.close();
-            return;
-          }
-          console.log("[Server] Processing file:", file.name, "Size:", file.size, "Type:", file.type);
+  try {
+    // Step 1: Get document content
+    jobTracker.updateJob(jobId, {
+      status: "extracting_content",
+      step: 1,
+      message: "Extracting document content",
+      progress: 0,
+    });
+    const contentStep = await getDocumentContent(file);
+    if (!contentStep.success || !contentStep.data) {
+      throw new Error(contentStep.error || "Failed to extract document content");
+    }
 
-          // Step 1: Get document content
-          console.log("[Server] Step 1: Starting content extraction");
-          sendUpdate({ step: 1, message: "Extracting document content" });
-          const contentStep = await getDocumentContent(file);
-          if (!contentStep.success || !contentStep.data) {
-            console.error("[Server] Content extraction failed:", contentStep.error);
-            sendUpdate({ step: 1, error: contentStep.error });
-            controller.close();
-            return;
-          }
-          console.log("[Server] Content extraction completed successfully");
-          sendUpdate({ step: 1, message: "Document content extracted" });
+    // Step 2: Upload document with metadata
+    jobTracker.updateJob(jobId, {
+      status: "uploading_document",
+      step: 2,
+      message: "Uploading document",
+      progress: 20,
+    });
+    const uploadStep = await uploadDocumentWithMetadata(file, contentStep.data.buffer, contentStep.data.content);
+    if (!uploadStep.success || !uploadStep.data) {
+      throw new Error(uploadStep.error || "Failed to upload document");
+    }
 
-          // Step 2: Upload document with metadata
-          console.log("[Server] Step 2: Starting document upload");
-          sendUpdate({ step: 2, message: "Uploading document" });
-          const uploadStep = await uploadDocumentWithMetadata(file, contentStep.data.buffer, contentStep.data.content);
-          if (!uploadStep.success || !uploadStep.data) {
-            console.error("[Server] Document upload failed:", uploadStep.error);
-            sendUpdate({ step: 2, error: uploadStep.error });
-            controller.close();
-            return;
-          }
-          console.log("[Server] Document upload completed successfully");
-          sendUpdate({ step: 2, message: "Document uploaded" });
+    // Step 3: Process document chunks and store embeddings
+    jobTracker.updateJob(jobId, {
+      status: "processing_chunks",
+      step: 3,
+      message: "Processing document chunks",
+      progress: 40,
+    });
+    const chunksStep = await processDocumentChunks(contentStep.data.content);
+    if (!chunksStep.success || !chunksStep.data) {
+      throw new Error(chunksStep.error || "Failed to process document chunks");
+    }
 
-          // Step 3: Process document chunks and store embeddings
-          console.log("[Server] Step 3: Starting chunk processing");
-          sendUpdate({ step: 3, message: "Processing document chunks" });
-          const chunksStep = await processDocumentChunks(contentStep.data.content);
-          if (!chunksStep.success || !chunksStep.data) {
-            console.error("[Server] Chunk processing failed:", chunksStep.error);
-            sendUpdate({ step: 3, error: chunksStep.error });
-            controller.close();
-            return;
-          }
-          console.log("[Server] Chunk processing completed successfully");
-          sendUpdate({ step: 3, message: "Document chunks processed" });
+    // Step 4: Generate document embedding
+    jobTracker.updateJob(jobId, {
+      status: "generating_embedding",
+      step: 4,
+      message: "Generating document embedding",
+      progress: 60,
+    });
+    const embeddingStep = await generateDocumentEmbedding(chunksStep.data.contentHash);
+    if (!embeddingStep.success || !embeddingStep.data) {
+      throw new Error(embeddingStep.error || "Failed to generate document embedding");
+    }
 
-          // Step 4: Generate document embedding
-          console.log("[Server] Step 4: Starting embedding generation");
-          sendUpdate({ step: 4, message: "Generating document embedding" });
-          const embeddingStep = await generateDocumentEmbedding(chunksStep.data.contentHash);
-          if (!embeddingStep.success || !embeddingStep.data) {
-            console.error("[Server] Embedding generation failed:", embeddingStep.error);
-            sendUpdate({ step: 4, error: embeddingStep.error });
-            controller.close();
-            return;
-          }
-          console.log("[Server] Embedding generation completed successfully");
-          sendUpdate({ step: 4, message: "Document embedding generated" });
+    // Step 5: Store document in the database
+    jobTracker.updateJob(jobId, {
+      status: "storing_document",
+      step: 5,
+      message: "Storing document in database",
+      progress: 80,
+    });
+    const storeStep = await storeDocument({
+      name: uploadStep.data.title,
+      bucketName: uploadStep.data.bucketName,
+      objectKey: uploadStep.data.objectKey,
+      embedding: embeddingStep.data,
+      contentHash: chunksStep.data.contentHash,
+      type: file.type,
+      content: contentStep.data.content,
+      tags: uploadStep.data.tags,
+    });
 
-          // Step 5: Store document in the database
-          console.log("[Server] Step 5: Starting document storage");
-          sendUpdate({ step: 5, message: "Storing document in database" });
-          const storeStep = await storeDocument({
-            name: uploadStep.data.title,
-            bucketName: uploadStep.data.bucketName,
-            objectKey: uploadStep.data.objectKey,
-            embedding: embeddingStep.data,
-            contentHash: chunksStep.data.contentHash,
-            type: file.type,
-            content: contentStep.data.content,
-            tags: uploadStep.data.tags,
-          });
-          if (!storeStep.success || !storeStep.data) {
-            console.error("[Server] Document storage failed:", storeStep.error);
-            sendUpdate({ step: 5, error: storeStep.error });
-            controller.close();
-            return;
-          }
-          console.log("[Server] Document storage completed successfully");
-          sendUpdate({ step: 5, message: "Document stored successfully", document: storeStep.data });
-        } catch (error) {
-          console.error("[Server] Unexpected error during document processing:", error);
-          sendUpdate({ error: error instanceof Error ? error.message : "Unknown error" });
-        }
-        controller.close();
-      },
-    }),
-    {
-      headers: { "Content-Type": "application/json" },
-    },
-  );
+    if (!storeStep.success || !storeStep.data) {
+      throw new Error(storeStep.error || "Failed to store document");
+    }
+
+    // Complete the job with the final document
+    jobTracker.completeJob(jobId, storeStep.data);
+  } catch (error) {
+    console.error("Error processing document:", error);
+    throw error;
+  }
 }

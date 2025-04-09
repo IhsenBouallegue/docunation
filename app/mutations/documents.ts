@@ -32,6 +32,8 @@ export function useDeleteDocument() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.invalidateQueries({ queryKey: ["document-suggestions"] });
+      queryClient.invalidateQueries({ queryKey: ["document-graph"] });
     },
   });
 }

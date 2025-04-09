@@ -1,17 +1,15 @@
-import { CompactDocumentCard } from "@/app/components/DocumentWarehouse/CompactDocumentCard";
 import type { Document } from "@/app/types/document";
 import { motion } from "framer-motion";
-import { BookOpen, Inbox } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import { useMemo } from "react";
 import { DocumentFolder } from "./DocumentFolder";
 
 interface DocumentShelfProps {
   documents: Document[];
   shelfNumber: number;
-  onDocumentDeleted: () => void;
 }
 
-export function DocumentShelf({ documents, shelfNumber, onDocumentDeleted }: DocumentShelfProps) {
+export function DocumentShelf({ documents, shelfNumber }: DocumentShelfProps) {
   // Group documents by folder
   const documentsByFolder = useMemo(() => {
     return documents.reduce(
@@ -56,7 +54,6 @@ export function DocumentShelf({ documents, shelfNumber, onDocumentDeleted }: Doc
             documents={docs}
             shelfNumber={shelfNumber}
             folderName={folder}
-            onDocumentDeleted={onDocumentDeleted}
           />
         ))}
       </div>

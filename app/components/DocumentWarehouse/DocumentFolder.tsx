@@ -14,9 +14,8 @@ interface DocumentFolderProps {
   documents: Document[];
   shelfNumber: number;
   folderName: string;
-  onDocumentDeleted: () => void;
 }
-export function DocumentFolder({ title, documents, shelfNumber, folderName, onDocumentDeleted }: DocumentFolderProps) {
+export function DocumentFolder({ title, documents, shelfNumber, folderName }: DocumentFolderProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const toggleExpanded = () => setIsExpanded(!isExpanded);
@@ -67,7 +66,7 @@ export function DocumentFolder({ title, documents, shelfNumber, folderName, onDo
               <div className="space-y-2">
                 <AnimatePresence initial={false}>
                   {documents.slice(0, isExpanded ? documents.length : NUM_DOCUMENTS_TO_SHOW).map((doc, index) => (
-                    <CompactDocumentCard key={doc.id} document={doc} index={index} onDelete={onDocumentDeleted} />
+                    <CompactDocumentCard key={doc.id} document={doc} index={index} />
                   ))}
                 </AnimatePresence>
               </div>
