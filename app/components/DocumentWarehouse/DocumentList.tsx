@@ -29,10 +29,10 @@ export function DocumentList() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       <UnsortedDocumentTray />
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4">
         {shelves?.map((shelf) => (
           <DocumentShelf key={shelf.id} shelf={shelf} />
         ))}

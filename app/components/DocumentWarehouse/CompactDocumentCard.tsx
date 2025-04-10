@@ -71,12 +71,12 @@ export function CompactDocumentCard({ document, index }: CompactDocumentCardProp
         <motion.div
           layout
           initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "40px" }}
+          animate={{ opacity: 1, height: "32px" }}
           exit={{ opacity: 0, height: 0 }}
           className={`
                 group relative
                 bg-gradient-to-r ${getGradient(document.documentContentHash)}
-                px-3 rounded-md shadow-sm
+                px-2 sm:px-3 rounded-md shadow-sm
                 cursor-pointer hover:shadow-md transition-shadow
                 flex items-center
                 ${isDeleting ? "animate-pulse duration-1000" : ""}
@@ -91,23 +91,23 @@ export function CompactDocumentCard({ document, index }: CompactDocumentCardProp
             setIsDialogOpen(true);
           }}
         >
-          <div className="flex items-center gap-2 text-white w-full">
-            <div className="bg-white/20 p-1 rounded">{iconMap[type]}</div>
-            <span className="text-sm font-medium truncate">{document.name}</span>
+          <div className="flex items-center gap-1.5 sm:gap-2 text-white w-full">
+            <div className="bg-white/20 p-0.5 sm:p-1 rounded">{iconMap[type]}</div>
+            <span className="text-xs sm:text-sm font-medium truncate">{document.name}</span>
           </div>
 
           {/* Delete button - appears on hover */}
           <Button
             variant="destructive"
             size="icon"
-            className="absolute right-1 opacity-0 group-hover:opacity-100 transition-opacity size-6"
+            className="absolute right-0.5 sm:right-1 opacity-0 group-hover:opacity-100 transition-opacity size-5 sm:size-6"
             onClick={(e) => {
               e.stopPropagation();
               deleteDocument(document.id);
             }}
             disabled={isDeleting}
           >
-            <Trash2 className="size-3" />
+            <Trash2 className="size-2.5 sm:size-3" />
           </Button>
         </motion.div>
       </div>

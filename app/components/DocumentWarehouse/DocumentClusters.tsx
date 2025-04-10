@@ -70,7 +70,7 @@ export function DocumentClusters() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <CardTitle>Document Organization</CardTitle>
           <CardDescription>
@@ -78,7 +78,12 @@ export function DocumentClusters() {
           </CardDescription>
         </div>
         {suggestions.length > 0 && (
-          <Button size="sm" className="gap-2" onClick={() => applyAllSuggestions()} disabled={isApplying}>
+          <Button
+            size="sm"
+            className="gap-2 w-full sm:w-auto"
+            onClick={() => applyAllSuggestions()}
+            disabled={isApplying}
+          >
             {isApplying ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -95,7 +100,7 @@ export function DocumentClusters() {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between ">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div
               className="flex items-center gap-2 cursor-pointer"
               onClick={() => {
@@ -118,7 +123,12 @@ export function DocumentClusters() {
               <Switch checked={forceReorganize} />
               <Label className="cursor-pointer">Force Complete Reorganization</Label>
             </div>
-            <Button onClick={() => refetchSuggestions()} disabled={isCalculatingSuggestions} variant="secondary">
+            <Button
+              onClick={() => refetchSuggestions()}
+              disabled={isCalculatingSuggestions}
+              variant="secondary"
+              className="w-full sm:w-auto"
+            >
               Suggest Organization
             </Button>
           </div>
@@ -130,18 +140,18 @@ export function DocumentClusters() {
                 {suggestions.map((suggestion) => (
                   <div
                     key={suggestion.id}
-                    className="flex items-center justify-between gap-4 p-3 bg-muted/60 rounded-lg w-full "
+                    className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 bg-muted/60 rounded-lg w-full"
                   >
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 space-y-1 sm:space-y-0">
                       <p className="text-sm font-medium truncate text-ellipsis">{suggestion.name}</p>
-                      <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                        <span>
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                        <span className="truncate">
                           {suggestion.currentLocation
                             ? `${suggestion.currentLocation.shelfName}-${suggestion.currentLocation.folderName}`
                             : "Unassigned"}
                         </span>
-                        <ArrowRight className="h-4 w-4" />
-                        <span className="font-medium text-foreground">
+                        <ArrowRight className="h-4 w-4 hidden sm:block" />
+                        <span className="font-medium text-foreground truncate">
                           {suggestion.suggestedLocation
                             ? `${suggestion.suggestedLocation.shelfName}-${suggestion.suggestedLocation.folderName}`
                             : "Unassigned"}

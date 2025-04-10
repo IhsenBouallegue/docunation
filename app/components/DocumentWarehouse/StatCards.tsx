@@ -8,14 +8,14 @@ export function StatCards() {
   const { data: documents = [] } = useDocuments();
   const { data: folders = [] } = useFolders();
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
       <GradientCard
         gradient={{
           from: "rgb(59, 130, 246)", // blue-500
           via: "rgb(99, 102, 241)", // indigo-500
           to: "rgb(139, 92, 246)", // violet-500
         }}
-        className="cursor-default transition-all duration-300"
+        className="cursor-default transition-all duration-300 h-full"
       >
         <IconNumberCard
           title="Documents"
@@ -31,7 +31,7 @@ export function StatCards() {
           via: "rgb(16, 185, 129)", // emerald-500
           to: "rgb(20, 184, 166)", // teal-500
         }}
-        className="cursor-default transition-all duration-300"
+        className="cursor-default transition-all duration-300 h-full"
       >
         <IconNumberCard
           title="Folders"
@@ -47,7 +47,7 @@ export function StatCards() {
           via: "rgb(225, 29, 72)", // rose-500
           to: "rgb(239, 68, 68)", // red-500
         }}
-        className="cursor-default transition-all duration-300"
+        className="cursor-default transition-all duration-300 h-full sm:col-span-2 lg:col-span-1"
       >
         <IconNumberCard
           title="Tags"

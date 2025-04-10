@@ -56,13 +56,13 @@ export function DocumentGraphCard() {
             No document relationships found. Add more documents to see connections.
           </div>
         ) : (
-          <div className="w-full h-auto">
+          <div className="w-full h-[50vh] min-h-[300px] overflow-hidden">
             <ForceGraph2D
               graphData={graphData}
               nodeLabel="name"
               backgroundColor="transparent"
-              width={600}
-              height={400}
+              width={undefined}
+              height={undefined}
               nodeColor="color"
               linkColor="color"
             />

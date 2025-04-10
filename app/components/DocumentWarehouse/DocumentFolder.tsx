@@ -42,10 +42,10 @@ export function DocumentFolder({ folder }: { folder: Folder }) {
   return (
     <ContextMenu>
       <ContextMenuTrigger>
-        <div className="relative w-full max-w-md mx-auto h-full">
+        <div className="relative w-full max-w-full sm:max-w-md mx-auto h-full">
           {/* Folder Label */}
           <div
-            className="absolute -top-3 left-4 z-10  flex items-center gap-2 bg-white px-2 cursor-pointer"
+            className="absolute -top-3 left-3 sm:left-4 z-10 flex items-center gap-1.5 sm:gap-2 bg-white px-1.5 sm:px-2 cursor-pointer"
             onClick={toggleExpanded}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
@@ -55,19 +55,21 @@ export function DocumentFolder({ folder }: { folder: Folder }) {
           >
             {filteredDocuments.length > NUM_DOCUMENTS_TO_SHOW && (
               <ChevronRight
-                className={`h-4 w-4 text-slate-600 transition-transform duration-300 ${isExpanded ? "rotate-90" : ""}`}
+                className={`h-3.5 sm:h-4 w-3.5 sm:w-4 text-slate-600 transition-transform duration-300 ${isExpanded ? "rotate-90" : ""}`}
               />
             )}
-            <FolderIcon className="h-4 w-4 text-slate-600" />
-            <span className="text-sm font-medium text-slate-600">{folder.name}</span>
-            <div className="flex items-center justify-center bg-slate-100 text-slate-600 text-xs font-medium rounded-full h-5 w-5">
+            <FolderIcon className="h-3.5 sm:h-4 w-3.5 sm:w-4 text-slate-600" />
+            <span className="text-xs sm:text-sm font-medium text-slate-600 truncate max-w-[150px] sm:max-w-[200px]">
+              {folder.name}
+            </span>
+            <div className="flex items-center justify-center bg-slate-100 text-slate-600 text-xs font-medium rounded-full h-4 sm:h-5 w-4 sm:w-5 min-w-[16px] sm:min-w-[20px]">
               {filteredDocuments.length}
             </div>
           </div>
 
           {/* Folder Container */}
           <div
-            className="w-full h-full min-h-32 border border-dashed border-slate-400 rounded-lg bg-white cursor-pointer text-left relative p-3"
+            className="w-full h-full min-h-[120px] sm:min-h-32 border border-dashed border-slate-400 rounded-lg bg-white cursor-pointer text-left relative p-2 sm:p-3"
             onClick={toggleExpanded}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
@@ -75,7 +77,7 @@ export function DocumentFolder({ folder }: { folder: Folder }) {
               }
             }}
           >
-            <div className="space-y-2">
+            <div className="space-y-1.5 sm:space-y-2">
               <AnimatePresence initial={false}>
                 {filteredDocuments
                   .slice(0, isExpanded ? filteredDocuments.length : NUM_DOCUMENTS_TO_SHOW)
@@ -85,7 +87,7 @@ export function DocumentFolder({ folder }: { folder: Folder }) {
               </AnimatePresence>
             </div>
             {filteredDocuments.length === 0 && (
-              <div className="text-sm text-slate-500 text-center mt-4">Empty folder</div>
+              <div className="text-xs sm:text-sm text-slate-500 text-center mt-4">Empty folder</div>
             )}
           </div>
 
@@ -101,9 +103,9 @@ export function DocumentFolder({ folder }: { folder: Folder }) {
                   delay: isExpanded ? 0 : 0.2,
                   ease: "easeOut",
                 }}
-                className="absolute -bottom-2 left-4 z-10 flex items-center gap-2 bg-white px-2"
+                className="absolute -bottom-2 left-3 sm:left-4 z-10 flex items-center gap-1.5 sm:gap-2 bg-white px-1.5 sm:px-2"
               >
-                <span className="text-xs font-medium text-slate-500">
+                <span className="text-[10px] sm:text-xs font-medium text-slate-500">
                   +{filteredDocuments.length - NUM_DOCUMENTS_TO_SHOW} more
                 </span>
               </motion.div>

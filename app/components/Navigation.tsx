@@ -1,7 +1,7 @@
 "use client";
 
 import { Dock } from "@/components/ui/dock";
-import { BoxIcon, FileTextIcon, FolderIcon, HomeIcon, SearchIcon } from "lucide-react";
+import { BoxIcon, FileTextIcon, FolderIcon, HomeIcon, MessageSquare, SearchIcon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { memo } from "react";
 
@@ -11,25 +11,11 @@ const data = [
     label: "Home",
     href: "/",
   },
+
   {
-    icon: FileTextIcon,
-    label: "Documents",
-    href: "/documents",
-  },
-  {
-    icon: FolderIcon,
-    label: "Collections",
-    href: "/collections",
-  },
-  {
-    icon: SearchIcon,
-    label: "Search",
-    href: "/search",
-  },
-  {
-    icon: BoxIcon,
-    label: "Archive",
-    href: "/archive",
+    icon: MessageSquare,
+    label: "Chat",
+    href: "/chat",
   },
 ];
 

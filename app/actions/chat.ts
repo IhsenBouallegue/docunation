@@ -11,10 +11,11 @@ export async function generateChatResponse(query: string) {
       Please base your answer only on the context provided by the vector query tool. 
       If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `);
-
+    console.log(response);
     return {
       success: true,
       message: response.text,
+      sources: response.sources,
     };
   } catch (error) {
     console.error("Error generating chat response:", error);

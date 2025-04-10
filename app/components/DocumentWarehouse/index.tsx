@@ -23,23 +23,23 @@ export function DocumentWarehouse() {
   const { data: documents = [], isPending: isDocumentsPending, error: documentsError } = useDocuments();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <StatCards />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
         {/* Left Column - Documents */}
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Documents</h2>
             <DocumentUpload />
           </div>
           <div className="flex-1 overflow-hidden rounded-xl">
             {isDocumentsPending ? (
-              <div className="flex items-center justify-center h-[400px]">
+              <div className="flex items-center justify-center h-[300px] sm:h-[400px]">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : documentsError ? (
-              <div className="flex flex-col items-center justify-center h-[400px] gap-2 text-destructive p-4 text-center">
+              <div className="flex flex-col items-center justify-center h-[300px] sm:h-[400px] gap-2 text-destructive p-4 text-center">
                 <p className="text-sm font-medium">Failed to load documents</p>
                 <p className="text-xs opacity-70">
                   {documentsError instanceof Error ? documentsError.message : "Unknown error"}
@@ -54,7 +54,7 @@ export function DocumentWarehouse() {
         </div>
 
         {/* Right Column - Relationships and Clusters */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:gap-4">
           <DocumentGraphCard />
           <DocumentClusters />
         </div>
