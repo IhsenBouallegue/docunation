@@ -35,7 +35,6 @@ export function DocumentGraphCard() {
       }
       return result.data;
     },
-    initialData: { nodes: [], links: [] },
   });
 
   return (
@@ -52,7 +51,7 @@ export function DocumentGraphCard() {
           <div className="text-center py-8 text-sm text-destructive">
             Error: {error instanceof Error ? error.message : "Unknown error"}
           </div>
-        ) : graphData.nodes.length === 0 ? (
+        ) : graphData?.nodes.length === 0 ? (
           <div className="text-center py-8 text-sm text-muted-foreground">
             No document relationships found. Add more documents to see connections.
           </div>

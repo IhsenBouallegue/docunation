@@ -1,6 +1,34 @@
-import { index, integer, jsonb, pgSchema, text, timestamp, uuid, varchar, vector } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
+import { index, jsonb, pgSchema, text, timestamp, uuid, vector } from "drizzle-orm/pg-core";
 
 export const docuSchema = pgSchema("docu");
+
+export const shelves = docuSchema.table(
+  "shelves",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    embedding: vector({ dimensions: 1536 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("shelf_embedding_index").using("hnsw", table.embedding.op("vector_cosine_ops"))],
+);
+
+export const folders = docuSchema.table(
+  "folders",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    shelfId: uuid("shelf_id")
+      .references(() => shelves.id)
+      .notNull(),
+    embedding: vector({ dimensions: 1536 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("folder_embedding_index").using("hnsw", table.embedding.op("vector_cosine_ops"))],
+);
 
 export const documents = docuSchema.table(
   "documents",
@@ -11,8 +39,7 @@ export const documents = docuSchema.table(
     objectKey: text("object_key").notNull(),
     type: text("type").notNull(),
     content: text("content").notNull(),
-    shelf: integer("shelf"),
-    folder: varchar("folder", { length: 1 }),
+    folderId: uuid("folder_id").references(() => folders.id),
     section: text("section"),
     tags: jsonb("tags").array(),
     embedding: vector({ dimensions: 1536 }).notNull(),
@@ -20,7 +47,24 @@ export const documents = docuSchema.table(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (table) => ({
-    embeddingIndex: index("embedding_index").using("hnsw", table.embedding.op("vector_cosine_ops")),
-  }),
+  (table) => [index("document_embedding_index").using("hnsw", table.embedding.op("vector_cosine_ops"))],
 );
+
+export const shelvesRelations = relations(shelves, ({ many }) => ({
+  folders: many(folders),
+}));
+
+export const foldersRelations = relations(folders, ({ one, many }) => ({
+  shelf: one(shelves, {
+    fields: [folders.shelfId],
+    references: [shelves.id],
+  }),
+  documents: many(documents),
+}));
+
+export const documentsRelations = relations(documents, ({ one }) => ({
+  folder: one(folders, {
+    fields: [documents.folderId],
+    references: [folders.id],
+  }),
+}));

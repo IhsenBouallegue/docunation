@@ -1,99 +1,157 @@
 "use client";
 
-import type { Document } from "@/app/types/document";
-import { Droppable } from "@hello-pangea/dnd";
+import { useDocuments } from "@/app/hooks/documents";
+import { useDeleteFolder } from "@/app/hooks/folders";
+import type { Folder } from "@/app/types/document";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronRight, Folder } from "lucide-react";
-import { useState } from "react";
+import { ChevronRight, FolderIcon, Loader2, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
 import { CompactDocumentCard } from "./CompactDocumentCard";
 
 const NUM_DOCUMENTS_TO_SHOW = 3;
 
-interface DocumentFolderProps {
-  title: string;
-  documents: Document[];
-  shelfNumber: number;
-  folderName: string;
-}
-export function DocumentFolder({ title, documents, shelfNumber, folderName }: DocumentFolderProps) {
+export function DocumentFolder({ folder }: { folder: Folder }) {
+  const { data: documents } = useDocuments();
+  const { mutate: deleteFolder, isPending: isDeleting } = useDeleteFolder(folder.id);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  const filteredDocuments = useMemo(() => {
+    return documents?.filter((doc) => doc.folderId === folder.id) ?? [];
+  }, [documents, folder.id]);
 
   const toggleExpanded = () => setIsExpanded(!isExpanded);
 
-  const droppableId = `folder-${shelfNumber}-${folderName}`;
+  const handleDelete = () => {
+    deleteFolder();
+    setShowDeleteDialog(false);
+  };
 
   return (
-    <div className="relative w-full max-w-md mx-auto">
-      {/* Folder Label */}
-      <div
-        className="absolute -top-3 left-4 z-10 flex items-center gap-2 bg-white px-2 cursor-pointer"
-        onClick={toggleExpanded}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            toggleExpanded();
-          }
-        }}
-      >
-        {documents.length > NUM_DOCUMENTS_TO_SHOW && (
-          <ChevronRight
-            className={`h-4 w-4 text-slate-600 transition-transform duration-300 ${isExpanded ? "rotate-90" : ""}`}
-          />
-        )}
-        <Folder className="h-4 w-4 text-slate-600" />
-        <span className="text-sm font-medium text-slate-600">{title}</span>
-        <div className="flex items-center justify-center bg-slate-100 text-slate-600 text-xs font-medium rounded-full h-5 w-5">
-          {documents.length}
-        </div>
-      </div>
+    <ContextMenu>
+      <ContextMenuTrigger>
+        <div className="relative w-full max-w-md mx-auto h-full">
+          {/* Folder Label */}
+          <div
+            className="absolute -top-3 left-4 z-10  flex items-center gap-2 bg-white px-2 cursor-pointer"
+            onClick={toggleExpanded}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                toggleExpanded();
+              }
+            }}
+          >
+            {filteredDocuments.length > NUM_DOCUMENTS_TO_SHOW && (
+              <ChevronRight
+                className={`h-4 w-4 text-slate-600 transition-transform duration-300 ${isExpanded ? "rotate-90" : ""}`}
+              />
+            )}
+            <FolderIcon className="h-4 w-4 text-slate-600" />
+            <span className="text-sm font-medium text-slate-600">{folder.name}</span>
+            <div className="flex items-center justify-center bg-slate-100 text-slate-600 text-xs font-medium rounded-full h-5 w-5">
+              {filteredDocuments.length}
+            </div>
+          </div>
 
-      {/* Folder Container */}
-      <div
-        className="w-full border border-dashed border-slate-300 rounded-lg bg-white cursor-pointer text-left relative"
-        onClick={toggleExpanded}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            toggleExpanded();
-          }
-        }}
-      >
-        <Droppable droppableId={droppableId}>
-          {(provided, snapshot) => (
-            <div
-              ref={provided.innerRef}
-              {...provided.droppableProps}
-              className={`p-3 pb-6 overflow-hidden ${snapshot.isDraggingOver ? "bg-slate-50" : ""}`}
-            >
-              <div className="space-y-2">
-                <AnimatePresence initial={false}>
-                  {documents.slice(0, isExpanded ? documents.length : NUM_DOCUMENTS_TO_SHOW).map((doc, index) => (
+          {/* Folder Container */}
+          <div
+            className="w-full h-full min-h-32 border border-dashed border-slate-400 rounded-lg bg-white cursor-pointer text-left relative p-3"
+            onClick={toggleExpanded}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                toggleExpanded();
+              }
+            }}
+          >
+            <div className="space-y-2">
+              <AnimatePresence initial={false}>
+                {filteredDocuments
+                  .slice(0, isExpanded ? filteredDocuments.length : NUM_DOCUMENTS_TO_SHOW)
+                  .map((doc, index) => (
                     <CompactDocumentCard key={doc.id} document={doc} index={index} />
                   ))}
-                </AnimatePresence>
-              </div>
-              {provided.placeholder}
+              </AnimatePresence>
             </div>
-          )}
-        </Droppable>
+            {filteredDocuments.length === 0 && (
+              <div className="text-sm text-slate-500 text-center mt-4">Empty folder</div>
+            )}
+          </div>
 
-        {/* More Documents Label */}
-        <AnimatePresence mode="wait">
-          {!isExpanded && documents.length > 2 && (
-            <motion.div
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 0 }}
-              transition={{
-                duration: isExpanded ? 0 : 0.3,
-                delay: isExpanded ? 0 : 0.2,
-                ease: "easeOut",
-              }}
-              className="absolute -bottom-2 left-4 z-10 flex items-center gap-2 bg-white px-2"
-            >
-              <span className="text-xs font-medium text-slate-500">+{documents.length - 2} more</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
+          {/* More Documents Label */}
+          <AnimatePresence mode="wait">
+            {!isExpanded && filteredDocuments.length > NUM_DOCUMENTS_TO_SHOW && (
+              <motion.div
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 0 }}
+                transition={{
+                  duration: isExpanded ? 0 : 0.3,
+                  delay: isExpanded ? 0 : 0.2,
+                  ease: "easeOut",
+                }}
+                className="absolute -bottom-2 left-4 z-10 flex items-center gap-2 bg-white px-2"
+              >
+                <span className="text-xs font-medium text-slate-500">
+                  +{filteredDocuments.length - NUM_DOCUMENTS_TO_SHOW} more
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </ContextMenuTrigger>
+
+      <ContextMenuContent>
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogTrigger asChild>
+            <ContextMenuItem className="text-destructive" onSelect={(e) => e.preventDefault()}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Folder
+            </ContextMenuItem>
+          </AlertDialogTrigger>
+
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Folder</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this folder? This will unassign all documents in this folder but won't
+                delete the documents themselves.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

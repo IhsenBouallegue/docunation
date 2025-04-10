@@ -2,30 +2,14 @@
 
 import { db } from "@/app/db";
 import { documents } from "@/app/db/schema";
-import type { DocumentLocationChange, OrganizationConfig } from "@/app/types/organization";
+import type { DocumentLocationChange } from "@/app/types/organization";
 import { assignmentsToClusters, kmeans } from "@/app/utils/kmeans";
-import { desc, eq } from "drizzle-orm";
+import { asc, eq, isNull } from "drizzle-orm";
 
 // ========== Constants ==========
-const DEFAULT_MAX_FOLDERS = 4; // A-J folders
-const DEFAULT_MAX_SHELVES = 2; // 1-3 shelves
+const SIMILARITY_THRESHOLD = 0.5;
 
 // ========== Helpers ==========
-function averageEmbedding(vectors: number[][]): number[] | undefined {
-  if (!vectors.length) return undefined;
-
-  const dim = vectors[0].length;
-  const sum = Array(dim).fill(0);
-
-  for (const vec of vectors) {
-    for (let i = 0; i < dim; i++) {
-      sum[i] += vec[i];
-    }
-  }
-
-  return sum.map((val) => val / vectors.length);
-}
-
 function clusterDocuments(embeddings: number[][], k: number, seed: number): number[][] {
   if (embeddings.length === 0) return [];
   if (embeddings.length === 1) return [[0]];
@@ -39,90 +23,119 @@ function groupDocsByCluster<T>(data: T[], clusters: number[][]): T[][] {
   return clusters.map((cluster) => cluster.map((i) => data[i]));
 }
 
-function indexToLetter(i: number): string {
-  return String.fromCharCode(65 + i); // 0 → A, 1 → B, etc.
-}
-
 // ========== Core Functions ==========
 export async function suggestDocumentLocations(
-  config: OrganizationConfig = {},
+  forceReorganize = false,
 ): Promise<{ success: boolean; suggestions?: DocumentLocationChange[]; error?: string }> {
   try {
-    const { maxFolders = DEFAULT_MAX_FOLDERS, maxShelves = DEFAULT_MAX_SHELVES } = config;
+    // Get all documents with embeddings
+    const allDocs = await db.query.documents.findMany({
+      where: forceReorganize ? undefined : isNull(documents.folderId),
+      with: {
+        folder: {
+          with: {
+            shelf: true,
+          },
+        },
+      },
+      orderBy: asc(documents.createdAt),
+    });
 
-    // Validate input
-    if (maxFolders <= 0 || maxFolders > 26) {
-      return { success: false, error: "maxFolders must be between 1 and 26" };
-    }
-    if (maxShelves <= 0) {
-      return { success: false, error: "maxShelves must be greater than 0" };
-    }
-    // we need to order docs created at
-    const docs = await db
-      .select({
-        id: documents.id,
-        name: documents.name,
-        embedding: documents.embedding,
-        shelf: documents.shelf,
-        folder: documents.folder,
-        createdAt: documents.createdAt,
-      })
-      .from(documents)
-      .orderBy(desc(documents.createdAt));
-
-    // Filter out documents without embeddings
-    const docsWithEmbeddings = docs.filter(
-      (doc): doc is typeof doc & { embedding: number[] } => doc.embedding !== null && doc.embedding.length > 0,
-    );
-
-    if (docsWithEmbeddings.length === 0) {
-      // Return empty suggestions instead of error when no documents with embeddings are found
+    if (allDocs.length === 0) {
       return { success: true, suggestions: [] };
     }
 
-    // Adjust k based on data size
-    const effectiveFolders = Math.min(maxFolders, docsWithEmbeddings.length);
-    const embeddings = docsWithEmbeddings.map((d) => d.embedding);
+    // Get existing folders
+    const existingFolders = await db.query.folders.findMany({
+      with: {
+        documents: true,
+        shelf: true,
+      },
+    });
 
-    // First level clustering: documents into folders with seed 42
-    const folderClusters = clusterDocuments(embeddings, effectiveFolders, 42);
-    const folders = groupDocsByCluster(docsWithEmbeddings, folderClusters);
-
-    // Second level clustering: folders into shelves with different seed
-    const folderEmbeddings = folders
-      .map((group) => averageEmbedding(group.map((doc) => doc.embedding)))
-      .filter((embedding): embedding is number[] => embedding !== undefined);
-
-    if (folderEmbeddings.length === 0) {
-      return { success: false, error: "Failed to compute folder embeddings" };
+    if (existingFolders.length === 0) {
+      return { success: false, error: "No folders found. Please create at least one folder first." };
     }
 
-    const effectiveShelves = Math.min(maxShelves, folderEmbeddings.length);
-    // Use a different seed (73) for shelf clustering
-    const shelfClusters = clusterDocuments(folderEmbeddings, effectiveShelves, 73);
+    const folderCentroids = new Map<string, { centroid: number[]; shelfName: string; folderName: string }>();
 
-    const suggestions: DocumentLocationChange[] = [];
+    if (forceReorganize) {
+      // When force reorganizing, cluster all documents and assign them to folders
+      const embeddings = allDocs.map((doc) => doc.embedding);
+      const k = Math.min(existingFolders.length, allDocs.length);
+      const clusters = clusterDocuments(embeddings, k, 42);
+      const documentGroups = groupDocsByCluster(allDocs, clusters);
 
-    for (const [shelfId, folderIds] of shelfClusters.entries()) {
-      for (const folderId of folderIds) {
-        const folderLabel = indexToLetter(folderId);
-        for (const doc of folders[folderId]) {
-          suggestions.push({
-            id: doc.id,
-            name: doc.name,
-            currentLocation:
-              doc.shelf || doc.folder
-                ? {
-                    shelf: doc.shelf ?? undefined,
-                    folder: doc.folder ?? undefined,
-                  }
-                : undefined,
-            suggestedLocation: {
-              shelf: shelfId + 1, // Make shelves 1-based
-              folder: folderLabel,
-            },
+      // Assign each cluster to a folder
+      for (let i = 0; i < documentGroups.length; i++) {
+        const folder = existingFolders[i];
+        const docs = documentGroups[i];
+        if (docs.length > 0) {
+          folderCentroids.set(folder.id, {
+            centroid: calculateCentroid(docs.map((doc) => doc.embedding)),
+            shelfName: folder.shelf.name,
+            folderName: folder.name,
           });
         }
+      }
+    } else {
+      // For normal organization, use existing folder contents
+      for (const folder of existingFolders) {
+        const embeddings = folder.documents
+          .map((doc) => doc.embedding)
+          .filter((emb): emb is number[] => emb !== null && emb.length > 0);
+
+        // For empty folders, use the average of all document embeddings as a starting point
+        if (embeddings.length === 0) {
+          const avgEmbedding = calculateCentroid(allDocs.map((doc) => doc.embedding));
+          folderCentroids.set(folder.id, {
+            centroid: avgEmbedding,
+            shelfName: folder.shelf.name,
+            folderName: folder.name,
+          });
+        } else {
+          folderCentroids.set(folder.id, {
+            centroid: calculateCentroid(embeddings),
+            shelfName: folder.shelf.name,
+            folderName: folder.name,
+          });
+        }
+      }
+    }
+
+    // Process documents
+    const suggestions: DocumentLocationChange[] = [];
+
+    for (const doc of allDocs) {
+      // Find the most similar folder
+      let bestFolderId: string | null = null;
+      let bestSimilarity = -1;
+      let bestFolder: { shelfName: string; folderName: string } | null = null;
+
+      for (const [folderId, { centroid, shelfName, folderName }] of folderCentroids.entries()) {
+        const similarity = calculateCosineSimilarity(doc.embedding, centroid);
+        if (similarity > bestSimilarity) {
+          bestSimilarity = similarity;
+          bestFolderId = folderId;
+          bestFolder = { shelfName, folderName };
+        }
+      }
+
+      // For empty folders or force reorganize, we'll suggest changes even if similarity is low
+      if (bestFolderId && bestFolderId !== doc.folderId && (bestSimilarity > SIMILARITY_THRESHOLD || forceReorganize)) {
+        suggestions.push({
+          id: doc.id,
+          name: doc.name,
+          currentFolderId: doc.folderId,
+          suggestedFolderId: bestFolderId,
+          currentLocation: doc.folder
+            ? {
+                shelfName: doc.folder.shelf.name,
+                folderName: doc.folder.name,
+              }
+            : undefined,
+          suggestedLocation: bestFolder ?? undefined,
+        });
       }
     }
 
@@ -133,16 +146,32 @@ export async function suggestDocumentLocations(
   }
 }
 
+function calculateCosineSimilarity(a: number[], b: number[]): number {
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
 export async function applySuggestion(
   suggestion: DocumentLocationChange,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { id, suggestedLocation } = suggestion;
+    const { id, suggestedFolderId } = suggestion;
+
+    if (suggestedFolderId === null) {
+      return { success: false, error: "No suggested folder provided" };
+    }
+
     await db
       .update(documents)
       .set({
-        shelf: suggestedLocation.shelf,
-        folder: suggestedLocation.folder,
+        folderId: suggestedFolderId,
       })
       .where(eq(documents.id, id));
 
@@ -169,4 +198,23 @@ export async function applySuggestions(
     console.error("Error applying suggestions:", error);
     return { success: false, error: (error as Error).message };
   }
+}
+
+function calculateCentroid(vectors: number[][]): number[] {
+  if (vectors.length === 0) throw new Error("Cannot calculate centroid of empty vector set");
+
+  const dim = vectors[0].length;
+  const centroid = new Array(dim).fill(0);
+
+  for (const vector of vectors) {
+    for (let i = 0; i < dim; i++) {
+      centroid[i] += vector[i];
+    }
+  }
+
+  for (let i = 0; i < dim; i++) {
+    centroid[i] /= vectors.length;
+  }
+
+  return centroid;
 }

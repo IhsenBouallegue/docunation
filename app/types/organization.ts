@@ -1,3 +1,6 @@
+import type { folders, shelves } from "@/app/db/schema";
+import type { InferSelectModel } from "drizzle-orm";
+
 /**
  * Configuration for document organization
  */
@@ -7,27 +10,19 @@ export interface OrganizationConfig {
 }
 
 /**
- * Location within the physical storage system
- */
-export interface Location {
-  shelf?: number;
-  folder?: string;
-}
-
-/**
- * Suggested location with required fields
- */
-export interface SuggestedLocation {
-  shelf: number;
-  folder: string;
-}
-
-/**
  * Represents a document location change suggestion
  */
 export interface DocumentLocationChange {
   id: string;
   name: string;
-  currentLocation?: Location;
-  suggestedLocation: SuggestedLocation;
+  currentFolderId: string | null;
+  suggestedFolderId: string | null;
+  currentLocation?: {
+    shelfName: string;
+    folderName: string;
+  };
+  suggestedLocation?: {
+    shelfName: string;
+    folderName: string;
+  };
 }

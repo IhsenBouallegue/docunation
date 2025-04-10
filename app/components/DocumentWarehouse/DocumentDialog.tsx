@@ -1,6 +1,8 @@
 "use client";
 
-import { useDeleteDocument, useUpdateDocument } from "@/app/mutations/documents";
+import { useDeleteDocument, useUpdateDocument } from "@/app/hooks/documents";
+import { useFolders } from "@/app/hooks/folders";
+import { useShelves } from "@/app/hooks/shelves";
 import type { Document } from "@/app/types/document";
 import {
   AlertDialog,
@@ -31,10 +33,10 @@ interface DocumentDialogProps {
 }
 
 export function DocumentDialog({ document, isOpen, onClose }: DocumentDialogProps) {
+  const { data: folders } = useFolders();
+  const { data: shelves } = useShelves();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [documentName, setDocumentName] = useState(document?.name || "");
-  const [folder, setFolder] = useState(document?.folder || "");
-  const [shelf, setShelf] = useState(document?.shelf || 0);
   const [selectedTags, setSelectedTags] = useState<string[]>((document?.tags as string[]) || []);
   const [newTag, setNewTag] = useState("");
 
@@ -58,9 +60,9 @@ export function DocumentDialog({ document, isOpen, onClose }: DocumentDialogProp
     );
   };
 
-  const handleLocationUpdate = () => {
+  const handleLocationUpdate = (folderId: string | null) => {
     updateDoc(
-      { documentId: document.id, data: { folder, shelf } },
+      { documentId: document.id, data: { folderId } },
       {
         onSuccess: () => {
           toast.success("Location updated successfully");
@@ -221,31 +223,16 @@ export function DocumentDialog({ document, isOpen, onClose }: DocumentDialogProp
                   <MapPin className="h-4 w-4" />
                   Physical Location
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="storageUnit">Storage Unit</Label>
-                    <Input
-                      id="storageUnit"
-                      value={shelf}
-                      onChange={(e) => {
-                        setShelf(Number(e.target.value));
-                        handleLocationUpdate();
-                      }}
-                      placeholder="e.g., Cabinet 1"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="folderBox">Folder/Box</Label>
-                    <Input
-                      id="folderBox"
-                      value={folder}
-                      onChange={(e) => {
-                        setFolder(e.target.value);
-                        handleLocationUpdate();
-                      }}
-                      placeholder="e.g., Folder 42"
-                    />
-                  </div>
+                <div className="text-sm text-muted-foreground">
+                  {document.folderId ? (
+                    <>
+                      Shelf: {shelves?.find((shelf) => shelf.id === document.folderId)?.name}
+                      <br />
+                      Folder: {folders?.find((folder) => folder.id === document.folderId)?.name}
+                    </>
+                  ) : (
+                    "Unsorted"
+                  )}
                 </div>
               </div>
 

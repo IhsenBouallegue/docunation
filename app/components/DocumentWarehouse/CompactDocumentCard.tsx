@@ -1,16 +1,11 @@
-import { deleteDocument } from "@/app/actions/documents";
 import { DocumentDialog } from "@/app/components/DocumentWarehouse/DocumentDialog";
-import { useDeleteDocument } from "@/app/mutations/documents";
+import { useDeleteDocument } from "@/app/hooks/documents";
 import type { Document } from "@/app/types/document";
 import { Button } from "@/components/ui/button";
-import { Draggable } from "@hello-pangea/dnd";
-import { useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { FileArchive, FileImage, FileText, FileType, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
-// Map document types to icons
 const iconMap = {
   "application/pdf": <FileText className="h-4 w-4" />,
   image: <FileImage className="h-4 w-4" />,
@@ -72,55 +67,50 @@ export function CompactDocumentCard({ document, index }: CompactDocumentCardProp
 
   return (
     <>
-      <Draggable draggableId={document.id} index={index}>
-        {(provided, snapshot) => (
-          <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
-            <motion.div
-              layout
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "40px" }}
-              exit={{ opacity: 0, height: 0 }}
-              className={`
+      <div>
+        <motion.div
+          layout
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "40px" }}
+          exit={{ opacity: 0, height: 0 }}
+          className={`
                 group relative
                 bg-gradient-to-r ${getGradient(document.documentContentHash)}
                 px-3 rounded-md shadow-sm
                 cursor-pointer hover:shadow-md transition-shadow
                 flex items-center
-                ${snapshot.isDragging ? "opacity-50" : ""}
                 ${isDeleting ? "animate-pulse duration-1000" : ""}
               `}
-              transition={{
-                duration: 0.2,
-                ease: "easeInOut",
-              }}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setIsDialogOpen(true);
-              }}
-            >
-              <div className="flex items-center gap-2 text-white w-full">
-                <div className="bg-white/20 p-1 rounded">{iconMap[type]}</div>
-                <span className="text-sm font-medium truncate">{document.name}</span>
-              </div>
-
-              {/* Delete button - appears on hover */}
-              <Button
-                variant="destructive"
-                size="icon"
-                className="absolute right-1 opacity-0 group-hover:opacity-100 transition-opacity size-6"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteDocument(document.id);
-                }}
-                disabled={isDeleting}
-              >
-                <Trash2 className="size-3" />
-              </Button>
-            </motion.div>
+          transition={{
+            duration: 0.2,
+            ease: "easeInOut",
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDialogOpen(true);
+          }}
+        >
+          <div className="flex items-center gap-2 text-white w-full">
+            <div className="bg-white/20 p-1 rounded">{iconMap[type]}</div>
+            <span className="text-sm font-medium truncate">{document.name}</span>
           </div>
-        )}
-      </Draggable>
+
+          {/* Delete button - appears on hover */}
+          <Button
+            variant="destructive"
+            size="icon"
+            className="absolute right-1 opacity-0 group-hover:opacity-100 transition-opacity size-6"
+            onClick={(e) => {
+              e.stopPropagation();
+              deleteDocument(document.id);
+            }}
+            disabled={isDeleting}
+          >
+            <Trash2 className="size-3" />
+          </Button>
+        </motion.div>
+      </div>
       <DocumentDialog document={document} isOpen={isDialogOpen} onClose={() => setIsDialogOpen(false)} />
     </>
   );

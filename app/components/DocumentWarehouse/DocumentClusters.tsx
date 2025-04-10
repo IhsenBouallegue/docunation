@@ -1,231 +1,197 @@
 "use client";
 
-import { suggestDocumentLocations } from "@/app/actions/organize-documents";
-import { useUpdateDocument } from "@/app/mutations/documents";
-import type { DocumentLocationChange, OrganizationConfig } from "@/app/types/organization";
+import { applySuggestions, suggestDocumentLocations } from "@/app/actions/organize-documents";
+import { toast } from "@/app/components/ui/use-toast";
+import { useUpdateDocument } from "@/app/hooks/documents";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, FolderInput, Loader2, Settings2 } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, FolderInput, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
 export function DocumentClusters() {
   const queryClient = useQueryClient();
   const { mutate: updateDoc, isPending: isUpdating } = useUpdateDocument();
-  const [showSettings, setShowSettings] = useState(false);
-  const [config, setConfig] = useState<OrganizationConfig>({
-    maxFolders: 4,
-    maxShelves: 2,
-  });
+  const [showReorganizeDialog, setShowReorganizeDialog] = useState(false);
+  const [forceReorganize, setForceReorganize] = useState(false);
 
   const {
-    data: suggestions,
-    isLoading,
-    error,
-    refetch,
-  } = useQuery<DocumentLocationChange[]>({
-    queryKey: ["document-suggestions", config],
+    data: suggestions = [],
+    isPending: isCalculatingSuggestions,
+    refetch: refetchSuggestions,
+  } = useQuery({
+    queryKey: ["document-suggestions"],
     queryFn: async () => {
-      const result = await suggestDocumentLocations(config);
+      const result = await suggestDocumentLocations(forceReorganize);
       if (!result.success || !result.suggestions) {
-        throw new Error(result.error);
+        throw new Error(result.error ?? "Failed to organize documents");
       }
       return result.suggestions;
     },
   });
 
-  const handleApplyChange = (change: DocumentLocationChange) => {
-    updateDoc(
-      {
-        documentId: change.id,
-        data: {
-          shelf: change.suggestedLocation.shelf,
-          folder: change.suggestedLocation.folder,
-        },
-      },
-      {
-        onSuccess: () => {
-          toast.success(`Updated location for "${change.name}"`);
-          queryClient.invalidateQueries({ queryKey: ["documents"] });
-          queryClient.invalidateQueries({ queryKey: ["document-suggestions"] });
-        },
-        onError: (error) => {
-          toast.error(`Failed to update location: ${error.message}`);
-        },
-      },
-    );
-  };
-
-  const handleApplyAll = async () => {
-    if (!changes.length) return;
-
-    let successCount = 0;
-    let failureCount = 0;
-
-    // Process changes sequentially to avoid overwhelming the server
-    for (const change of changes) {
-      try {
-        await new Promise<void>((resolve, reject) => {
-          updateDoc(
-            {
-              documentId: change.id,
-              data: {
-                shelf: change.suggestedLocation.shelf,
-                folder: change.suggestedLocation.folder,
-              },
-            },
-            {
-              onSuccess: () => {
-                successCount++;
-                resolve();
-              },
-              onError: (error) => {
-                failureCount++;
-                reject(error);
-              },
-            },
-          );
-        });
-      } catch (error) {
-        console.error(`Failed to update ${change.name}:`, error);
+  const { mutate: applyAllSuggestions, isPending: isApplying } = useMutation({
+    mutationFn: async () => {
+      if (!suggestions.length) return;
+      const result = await applySuggestions(suggestions);
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to apply suggestions");
       }
-    }
-
-    // Show final summary
-    if (successCount > 0) {
-      toast.success(`Successfully updated ${successCount} document locations`);
-      // Refresh the data
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Documents organized successfully",
+      });
       queryClient.invalidateQueries({ queryKey: ["documents"] });
       queryClient.invalidateQueries({ queryKey: ["document-suggestions"] });
-    }
-    if (failureCount > 0) {
-      toast.error(`Failed to update ${failureCount} document locations`);
-    }
-  };
-
-  const handleConfigChange = (key: keyof OrganizationConfig, value: string) => {
-    const numValue = Number.parseInt(value, 10);
-    if (Number.isNaN(numValue)) return;
-
-    if (key === "maxFolders" && (numValue < 1 || numValue > 26)) {
-      toast.error("Number of folders must be between 1 and 26");
-      return;
-    }
-
-    if (key === "maxShelves" && numValue < 1) {
-      toast.error("Number of shelves must be at least 1");
-      return;
-    }
-
-    setConfig((prev) => ({ ...prev, [key]: numValue }));
-  };
-
-  // Calculate changes from suggestions
-  const changes =
-    suggestions?.filter(
-      (suggestion) =>
-        suggestion.currentLocation?.shelf !== suggestion.suggestedLocation.shelf ||
-        suggestion.currentLocation?.folder !== suggestion.suggestedLocation.folder,
-    ) ?? [];
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    },
+  });
 
   return (
-    <Card className="col-span-2">
+    <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Organization Suggestions</CardTitle>
-        <div className="flex items-center gap-2">
-          <Button size="icon" variant="ghost" onClick={() => setShowSettings(!showSettings)}>
-            <Settings2 className="h-4 w-4" />
-          </Button>
-          {changes.length > 0 && (
-            <Button size="sm" className="gap-2" onClick={handleApplyAll} disabled={isUpdating}>
-              {isUpdating ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Applying...
-                </>
-              ) : (
-                <>
-                  <FolderInput className="h-4 w-4" />
-                  Apply All Changes
-                </>
-              )}
-            </Button>
-          )}
+        <div>
+          <CardTitle>Document Organization</CardTitle>
+          <CardDescription>
+            Automatically organize your documents into folders based on their content similarity.
+          </CardDescription>
         </div>
+        {suggestions.length > 0 && (
+          <Button size="sm" className="gap-2" onClick={() => applyAllSuggestions()} disabled={isApplying}>
+            {isApplying ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Applying...
+              </>
+            ) : (
+              <>
+                <FolderInput className="h-4 w-4" />
+                Apply All Changes
+              </>
+            )}
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
-        {showSettings && (
-          <div className="mb-6 p-4 border rounded-lg space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="maxFolders">Maximum Folders (1-26)</Label>
-                <Input
-                  id="maxFolders"
-                  type="number"
-                  min={1}
-                  max={26}
-                  value={config.maxFolders}
-                  onChange={(e) => handleConfigChange("maxFolders", e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="maxShelves">Maximum Shelves (min: 1)</Label>
-                <Input
-                  id="maxShelves"
-                  type="number"
-                  min={1}
-                  value={config.maxShelves}
-                  onChange={(e) => handleConfigChange("maxShelves", e.target.value)}
-                />
-              </div>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between ">
+            <div
+              className="flex items-center gap-2 cursor-pointer"
+              onClick={() => {
+                if (!forceReorganize) {
+                  setShowReorganizeDialog(true);
+                } else {
+                  setForceReorganize(false);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  if (forceReorganize) {
+                    setShowReorganizeDialog(true);
+                  } else {
+                    setForceReorganize(false);
+                  }
+                }
+              }}
+            >
+              <Switch checked={forceReorganize} />
+              <Label className="cursor-pointer">Force Complete Reorganization</Label>
             </div>
-            <Button size="sm" onClick={() => refetch()}>
-              Recalculate Suggestions
+            <Button onClick={() => refetchSuggestions()} disabled={isCalculatingSuggestions} variant="secondary">
+              Suggest Organization
             </Button>
           </div>
-        )}
-        <div className="space-y-6">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin" />
-            </div>
-          ) : error ? (
-            <div className="text-center py-8 text-sm text-destructive">
-              Error loading suggestions: {error instanceof Error ? error.message : "Unknown error"}
-            </div>
-          ) : changes.length > 0 ? (
-            <div className="space-y-4">
-              {changes.map((change) => (
-                <div key={change.id} className="flex items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{change.name}</p>
-                    <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                      <span>
-                        {change.currentLocation?.shelf && change.currentLocation?.folder
-                          ? `${change.currentLocation.shelf}-${change.currentLocation.folder}`
-                          : "Unsorted"}
-                      </span>
-                      <ArrowRight className="h-4 w-4" />
-                      <span className="font-medium text-foreground">
-                        {change.suggestedLocation.shelf}-{change.suggestedLocation.folder}
-                      </span>
+
+          {suggestions.length > 0 ? (
+            <ScrollArea>
+              <h3 className="mb-4 text-sm font-medium">Suggested Changes</h3>
+              <div className="flex flex-col gap-2">
+                {suggestions.map((suggestion) => (
+                  <div
+                    key={suggestion.id}
+                    className="flex items-center justify-between gap-4 p-3 bg-muted/60 rounded-lg w-full "
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate text-ellipsis">{suggestion.name}</p>
+                      <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                        <span>
+                          {suggestion.currentLocation
+                            ? `${suggestion.currentLocation.shelfName}-${suggestion.currentLocation.folderName}`
+                            : "Unassigned"}
+                        </span>
+                        <ArrowRight className="h-4 w-4" />
+                        <span className="font-medium text-foreground">
+                          {suggestion.suggestedLocation
+                            ? `${suggestion.suggestedLocation.shelfName}-${suggestion.suggestedLocation.folderName}`
+                            : "Unassigned"}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <Button size="sm" onClick={() => handleApplyChange(change)} disabled={isUpdating}>
-                    {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                  </Button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </ScrollArea>
           ) : (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              No organization changes suggested. Your documents are well organized!
+            !isCalculatingSuggestions && (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                No organization changes suggested. Your documents are well organized!
+              </div>
+            )
+          )}
+          {isCalculatingSuggestions && (
+            <div className="py-8 text-sm text-muted-foreground flex items-center justify-center">
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Calculating suggestions...
+              </span>
             </div>
           )}
         </div>
+
+        <AlertDialog open={showReorganizeDialog} onOpenChange={setShowReorganizeDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Complete Reorganization</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will suggest a complete reorganization of all documents, potentially changing the location of every
+                document in your system. This action cannot be undone until you manually apply the changes.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setForceReorganize(true);
+                  refetchSuggestions();
+                  setShowReorganizeDialog(false);
+                }}
+              >
+                Continue
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );
