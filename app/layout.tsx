@@ -1,17 +1,17 @@
 import { Header } from "@/app/components/Header";
+import { Navigation } from "@/app/components/Navigation";
 import { QueryProvider } from "@/app/providers/QueryProvider";
 import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import "./globals.css";
-import { Navigation } from "@/app/components/Navigation";
 import { Toaster } from "sonner";
+import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Document Assistant",
-  description: "AI-powered document management and analysis",
+  title: "Docunation",
+  description: "Your personal document companion",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -20,11 +20,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={cn(inter.className, "antialiased")}>
         <QueryProvider>
           <div className="min-h-screen bg-gradient-to-b from-background to-background/80">
-            <div className="container mx-auto px-4">
-              <Header />
-              {children}
-              <Navigation />
-            </div>
+            <Header />
+            <div className="container mx-auto px-4">{children}</div>
+            <Navigation />
           </div>
         </QueryProvider>
         <Toaster richColors />

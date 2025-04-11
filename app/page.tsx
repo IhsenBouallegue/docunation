@@ -1,8 +1,15 @@
-import { ChatBubble } from "./components/ChatBubble";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { DocumentWarehouse } from "./components/DocumentWarehouse";
-import { Navigation } from "./components/Navigation";
 
-export default function Home() {
+export default async function Home() {
+  const session = await auth.api.getSession({ headers: await headers() });
+
+  if (!session) {
+    redirect("/sign-in");
+  }
+
   return (
     <main className="pb-24">
       {/* Main Content */}

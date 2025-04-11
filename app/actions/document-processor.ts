@@ -11,20 +11,15 @@ import { documents } from "@/app/db/schema";
 import { jobTracker } from "@/app/services/job-tracker";
 import type { Document } from "@/app/types/document";
 import { generatePresignedUrl, uploadFile } from "@/app/utils/minio";
+import { auth } from "@/lib/auth";
 import { processAndStoreDocument } from "@/mastra/rag";
 import { LlamaParseReader } from "llamaindex";
+import { headers } from "next/headers";
 
 interface ProcessingStep<T> {
   success: boolean;
   data?: T;
   error?: string;
-}
-
-interface StreamUpdate {
-  step?: number;
-  message?: string;
-  error?: string;
-  document?: Document;
 }
 
 // Step 1: Get document content from file
@@ -86,9 +81,14 @@ async function uploadDocumentWithMetadata(
 
 // Step 3: Process document chunks and store embeddings
 async function processDocumentChunks(content: string): Promise<ProcessingStep<{ contentHash: string }>> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
+
   try {
     const contentHash = createHash("sha256").update(content).digest("hex");
-    const result = await storeChunkEmbeddings(contentHash, content);
+    const result = await storeChunkEmbeddings(contentHash, content, session.user.id);
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -134,6 +134,11 @@ async function storeDocument(params: {
   content: string;
   tags: string[];
 }): Promise<ProcessingStep<Document>> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
+
   try {
     const [savedDoc] = await db
       .insert(documents)
@@ -146,6 +151,7 @@ async function storeDocument(params: {
         type: params.type,
         content: params.content,
         tags: params.tags,
+        userId: session.user.id,
       })
       .returning();
 
@@ -164,9 +170,9 @@ async function storeDocument(params: {
   }
 }
 
-export async function storeChunkEmbeddings(documentContentHash: string, content: string) {
+export async function storeChunkEmbeddings(documentContentHash: string, content: string, userId: string) {
   try {
-    const { totalChunks, totalEmbeddings } = await processAndStoreDocument(content, documentContentHash);
+    const { totalChunks, totalEmbeddings } = await processAndStoreDocument(content, documentContentHash, userId);
 
     if (!totalChunks || !totalEmbeddings) {
       return { success: false, error: "Failed to process and store document" };
@@ -180,6 +186,11 @@ export async function storeChunkEmbeddings(documentContentHash: string, content:
 }
 
 export async function processDocumentStream(formData: FormData, jobId: string): Promise<void> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
+
   const file = formData.get("file") as File;
   if (!file) {
     throw new Error("No file provided");

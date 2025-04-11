@@ -1,10 +1,12 @@
 "use server";
 
 import { db } from "@/app/db";
-import { documents } from "@/app/db/schema";
+import { documents, folders } from "@/app/db/schema";
 import type { DocumentLocationChange } from "@/app/types/organization";
 import { assignmentsToClusters, kmeans } from "@/app/utils/kmeans";
-import { asc, eq, isNull } from "drizzle-orm";
+import { auth } from "@/lib/auth";
+import { and, asc, eq, isNull } from "drizzle-orm";
+import { headers } from "next/headers";
 
 // ========== Constants ==========
 const SIMILARITY_THRESHOLD = 0.5;
@@ -28,9 +30,13 @@ export async function suggestDocumentLocations(
   forceReorganize = false,
 ): Promise<{ success: boolean; suggestions?: DocumentLocationChange[]; error?: string }> {
   try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      throw new Error("Unauthorized");
+    }
     // Get all documents with embeddings
     const allDocs = await db.query.documents.findMany({
-      where: forceReorganize ? undefined : isNull(documents.folderId),
+      where: and(forceReorganize ? undefined : isNull(documents.folderId), eq(documents.userId, session.user.id)),
       with: {
         folder: {
           with: {
@@ -51,6 +57,7 @@ export async function suggestDocumentLocations(
         documents: true,
         shelf: true,
       },
+      where: eq(folders.userId, session.user.id),
     });
 
     if (existingFolders.length === 0) {

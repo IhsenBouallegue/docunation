@@ -2,7 +2,10 @@
 
 import { db } from "@/app/db";
 import { documents } from "@/app/db/schema";
+import { auth } from "@/lib/auth";
 import { GraphRAG } from "@mastra/rag";
+import { eq } from "drizzle-orm";
+import { headers } from "next/headers";
 
 interface GraphNode {
   id: string;
@@ -25,8 +28,12 @@ interface GraphData {
 
 export async function createDocumentGraph(): Promise<{ success: boolean; data?: GraphData; error?: string }> {
   try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      throw new Error("Unauthorized");
+    }
     // Get all documents with their embeddings
-    const docs = await db.select().from(documents);
+    const docs = await db.select().from(documents).where(eq(documents.userId, session.user.id));
 
     // Filter out documents without embeddings
     const docsWithEmbeddings = docs.filter(

@@ -58,6 +58,7 @@
     "@types/pg": "^8.11.11",
     "@uploadthing/react": "^7.3.0",
     "ai": "4.1.61",
+    "better-auth": "^1.2.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.0",

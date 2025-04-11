@@ -1,5 +1,7 @@
+import { auth } from "@/lib/auth";
 import { Step } from "@mastra/core";
 import { Workflow } from "@mastra/core/workflows";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { documentAgent } from "../agents/documentAgent";
 import { processAndStoreDocument } from "../rag";
@@ -13,6 +15,10 @@ const processDocumentStep = new Step({
     documentContentHash: z.string().describe("The hash of the document content"),
   }),
   execute: async ({ context }) => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      throw new Error("Unauthorized");
+    }
     const triggerData = context?.getStepResult<{ text: string; documentContentHash: string }>("trigger");
 
     if (!triggerData) {
@@ -22,7 +28,7 @@ const processDocumentStep = new Step({
     const { text, documentContentHash } = triggerData;
 
     // Process and store the document
-    const result = await processAndStoreDocument(text, documentContentHash);
+    const result = await processAndStoreDocument(text, documentContentHash, session.user.id);
 
     return {
       totalChunks: result.totalChunks,

@@ -5,18 +5,29 @@ import { db } from "@/app/db";
 import { documents, shelves } from "@/app/db/schema";
 import type { Document, DocumentResponse, DocumentsResponse } from "@/app/types/document";
 import { generatePresignedUrl, minioClient } from "@/app/utils/minio";
+import { auth } from "@/lib/auth";
 import { mastra } from "@/mastra";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
+import { headers } from "next/headers";
 
 async function getDocumentWithRelations(documentId: string) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
   return db.query.documents.findFirst({
-    where: eq(documents.id, documentId),
+    where: and(eq(documents.id, documentId), eq(documents.userId, session.user.id)),
   });
 }
 
 // Utility function to fetch documents with relations
 async function getDocumentsWithRelations() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
   return db.query.documents.findMany({
+    where: eq(documents.userId, session.user.id),
     orderBy: asc(documents.createdAt),
   });
 }
@@ -43,6 +54,10 @@ export async function getDocuments(): Promise<DocumentsResponse> {
 // Delete a document and its associated data
 export async function deleteDocument(documentId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      throw new Error("Unauthorized");
+    }
     // Get document details first
     const doc = await getDocumentWithRelations(documentId);
 
@@ -71,7 +86,7 @@ export async function deleteDocument(documentId: string): Promise<{ success: boo
     await minioClient.removeObject(doc.bucketName, doc.objectKey);
 
     // Delete document from database
-    await db.delete(documents).where(eq(documents.id, documentId));
+    await db.delete(documents).where(and(eq(documents.id, documentId), eq(documents.userId, session.user.id)));
 
     return { success: true };
   } catch (error) {
@@ -83,6 +98,10 @@ export async function deleteDocument(documentId: string): Promise<{ success: boo
 // Update an existing document
 export async function updateDocument(documentId: string, data: Partial<Document>): Promise<DocumentResponse> {
   try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      throw new Error("Unauthorized");
+    }
     const [updatedDoc] = await db
       .update(documents)
       .set({
@@ -92,7 +111,7 @@ export async function updateDocument(documentId: string, data: Partial<Document>
         folderId: data.folderId ?? null,
         updatedAt: new Date(),
       })
-      .where(eq(documents.id, documentId))
+      .where(and(eq(documents.id, documentId), eq(documents.userId, session.user.id)))
       .returning();
 
     if (!updatedDoc) {
@@ -101,7 +120,7 @@ export async function updateDocument(documentId: string, data: Partial<Document>
 
     // If content was updated, reprocess embeddings
     if (data.content) {
-      await storeChunkEmbeddings(updatedDoc.documentContentHash, data.content);
+      await storeChunkEmbeddings(updatedDoc.documentContentHash, data.content, updatedDoc.userId);
     }
 
     // Fetch the complete document with relations
@@ -168,7 +187,14 @@ export async function calculateDocumentEmbedding(documentContentHash: string) {
 // Update document folder
 export async function updateDocumentFolder(documentId: string, folderId: string | null): Promise<DocumentResponse> {
   try {
-    await db.update(documents).set({ folderId }).where(eq(documents.id, documentId));
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      throw new Error("Unauthorized");
+    }
+    await db
+      .update(documents)
+      .set({ folderId })
+      .where(and(eq(documents.id, documentId), eq(documents.userId, session.user.id)));
 
     // Fetch the updated document with relations
     const updatedDoc = await getDocumentWithRelations(documentId);
@@ -191,7 +217,12 @@ export async function updateDocumentFolder(documentId: string, folderId: string 
 }
 
 export async function getShelvesWithFoldersAndDocuments() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    throw new Error("Unauthorized");
+  }
   return db.query.shelves.findMany({
+    where: eq(shelves.userId, session.user.id),
     with: {
       folders: {
         with: {

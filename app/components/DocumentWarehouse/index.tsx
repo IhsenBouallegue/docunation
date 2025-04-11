@@ -55,8 +55,8 @@ export function DocumentWarehouse() {
 
         {/* Right Column - Relationships and Clusters */}
         <div className="flex flex-col gap-3 sm:gap-4">
-          <DocumentGraphCard />
           <DocumentClusters />
+          <DocumentGraphCard />
         </div>
       </div>
     </div>

@@ -3,11 +3,18 @@
 import { db } from "@/app/db";
 import { shelves } from "@/app/db/schema";
 import type { Response, Shelf, ShelfWithFolders } from "@/app/types/document";
-import { asc, eq } from "drizzle-orm";
+import { auth } from "@/lib/auth";
+import { and, asc, eq } from "drizzle-orm";
+import { headers } from "next/headers";
 
 export async function createShelf(name: string): Promise<Response<Shelf>> {
   try {
-    const [shelf] = await db.insert(shelves).values({ name }).returning();
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      throw new Error("Unauthorized");
+    }
+
+    const [shelf] = await db.insert(shelves).values({ name, userId: session.user.id }).returning();
     return { success: true, data: shelf };
   } catch (error) {
     console.error("Error creating shelf:", error);
@@ -17,7 +24,13 @@ export async function createShelf(name: string): Promise<Response<Shelf>> {
 
 export async function getShelves(): Promise<Response<ShelfWithFolders[]>> {
   try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      throw new Error("Unauthorized");
+    }
+
     const results = await db.query.shelves.findMany({
+      where: eq(shelves.userId, session.user.id),
       with: {
         folders: {
           with: {
@@ -36,7 +49,16 @@ export async function getShelves(): Promise<Response<ShelfWithFolders[]>> {
 
 export async function renameShelf(id: string, name: string): Promise<Response<Shelf>> {
   try {
-    const [updatedShelf] = await db.update(shelves).set({ name }).where(eq(shelves.id, id)).returning();
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      throw new Error("Unauthorized");
+    }
+
+    const [updatedShelf] = await db
+      .update(shelves)
+      .set({ name })
+      .where(and(eq(shelves.id, id), eq(shelves.userId, session.user.id)))
+      .returning();
     return { success: true, data: updatedShelf };
   } catch (error) {
     console.error("Error updating shelf:", error);
@@ -46,7 +68,12 @@ export async function renameShelf(id: string, name: string): Promise<Response<Sh
 
 export async function deleteShelf(id: string): Promise<Response<void>> {
   try {
-    await db.delete(shelves).where(eq(shelves.id, id));
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      throw new Error("Unauthorized");
+    }
+
+    await db.delete(shelves).where(and(eq(shelves.id, id), eq(shelves.userId, session.user.id)));
     return { success: true };
   } catch (error) {
     console.error("Error deleting shelf:", error);
@@ -56,7 +83,14 @@ export async function deleteShelf(id: string): Promise<Response<void>> {
 
 export async function getShelfById(id: string): Promise<Response<Shelf>> {
   try {
-    const shelf = await db.query.shelves.findFirst({ where: eq(shelves.id, id) });
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      throw new Error("Unauthorized");
+    }
+
+    const shelf = await db.query.shelves.findFirst({
+      where: and(eq(shelves.id, id), eq(shelves.userId, session.user.id)),
+    });
     return { success: true, data: shelf };
   } catch (error) {
     console.error("Error fetching shelf by ID:", error);
@@ -66,7 +100,14 @@ export async function getShelfById(id: string): Promise<Response<Shelf>> {
 
 export async function getShelfByName(name: string): Promise<Response<Shelf>> {
   try {
-    const shelf = await db.query.shelves.findFirst({ where: eq(shelves.name, name) });
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      throw new Error("Unauthorized");
+    }
+
+    const shelf = await db.query.shelves.findFirst({
+      where: and(eq(shelves.name, name), eq(shelves.userId, session.user.id)),
+    });
     return { success: true, data: shelf };
   } catch (error) {
     console.error("Error fetching shelf by name:", error);

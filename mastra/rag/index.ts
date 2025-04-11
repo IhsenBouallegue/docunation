@@ -36,7 +36,11 @@ export async function chunkDocument(text: string) {
 /**
  * Generate embeddings for document chunks and store them in PostgreSQL
  */
-export async function generateAndStoreEmbeddings(chunks: { text: string }[], documentContentHash: string) {
+export async function generateAndStoreEmbeddings(
+  chunks: { text: string }[],
+  documentContentHash: string,
+  userId: string,
+) {
   try {
     // Generate embeddings for the chunks
     const { embeddings } = await embedMany({
@@ -58,6 +62,8 @@ export async function generateAndStoreEmbeddings(chunks: { text: string }[], doc
       metadata: chunks.map((chunk) => ({
         text: chunk.text,
         documentContentHash,
+        createdAt: new Date(),
+        userId,
       })),
     });
 
@@ -75,24 +81,25 @@ export async function generateAndStoreEmbeddings(chunks: { text: string }[], doc
 /**
  * Create a vector query tool for PostgreSQL
  */
-export function createPgVectorQueryTool() {
+export function createPgVectorQueryTool(userId: string) {
   return createVectorQueryTool({
     vectorStoreName: "pgVector",
     indexName: "embeddings",
     model: openai.embedding("text-embedding-3-small"),
+    enableFilter: true,
   });
 }
 
 /**
  * Process a document, generate embeddings, and store them in PostgreSQL
  */
-export async function processAndStoreDocument(text: string, documentContentHash: string) {
+export async function processAndStoreDocument(text: string, documentContentHash: string, userId: string) {
   try {
     // Process the document
     const { chunks } = await chunkDocument(text);
 
     // Generate and store embeddings
-    const { totalEmbeddings } = await generateAndStoreEmbeddings(chunks, documentContentHash);
+    const { totalEmbeddings } = await generateAndStoreEmbeddings(chunks, documentContentHash, userId);
 
     return {
       totalChunks: chunks.length,
