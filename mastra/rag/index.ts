@@ -81,7 +81,7 @@ export async function generateAndStoreEmbeddings(
 /**
  * Create a vector query tool for PostgreSQL
  */
-export function createPgVectorQueryTool(userId: string) {
+export function createPgVectorQueryTool() {
   return createVectorQueryTool({
     vectorStoreName: "pgVector",
     indexName: "embeddings",
