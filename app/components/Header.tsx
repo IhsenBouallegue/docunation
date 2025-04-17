@@ -11,25 +11,10 @@ export function Header() {
   const user = data?.user;
 
   return (
-    <header className="sticky top-0 z-50 w-full  bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center m-auto">
-        <div className="mr-4 flex">
-          <Logo />
-        </div>
-
         <div className="flex flex-1 items-center justify-between space-x-2">
-          <nav className="flex items-center space-x-6">
-            {user ? (
-              <>
-                <Link
-                  href="/"
-                  className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
-                >
-                  Documents
-                </Link>
-              </>
-            ) : null}
-          </nav>
+          <Logo className="h-14 w-24" />
 
           <div className="flex items-center space-x-4">
             {user ? (

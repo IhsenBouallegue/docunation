@@ -7,7 +7,7 @@ interface LogoProps {
 
 export function Logo({ className }: LogoProps) {
   return (
-    <div className={cn("flex items-center gap-2 relative h-6 w-6", className)}>
+    <div className={cn("flex items-center gap-2 relative h-full", className)}>
       <Image src="/Docunation_logo_text.png" alt="Docunation Logo" fill className="object-contain" priority />
     </div>
   );

@@ -21,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <QueryProvider>
           <div className="min-h-screen bg-gradient-to-b from-background to-background/80">
             <Header />
-            <div className="container mx-auto px-4">{children}</div>
+            <div className="container pt-2 mx-auto px-4">{children}</div>
             <Navigation />
           </div>
         </QueryProvider>

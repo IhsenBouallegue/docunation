@@ -233,6 +233,39 @@ export function DocumentUpload() {
   };
 
   const hasCompletedFiles = queuedFiles.some((file) => file.status === "completed");
+  const hasFailedFiles = queuedFiles.some((file) => file.status === "error");
+
+  const retryFailedFiles = async () => {
+    const failedFiles = queuedFiles.filter((file) => file.status === "error");
+    let hasSuccessfulUpload = false;
+
+    // Reset status of failed files to queued
+    setQueuedFiles((prev) =>
+      prev.map((file) =>
+        file.status === "error" ? { ...file, status: "queued" as const, progress: 0, error: undefined } : file,
+      ),
+    );
+
+    try {
+      // Process failed files in chunks of 5
+      await processFilesInChunks(failedFiles, 5, async (file) => {
+        try {
+          await processFile(file);
+          hasSuccessfulUpload = true;
+        } catch (error) {
+          console.error("Error processing file:", error);
+        }
+      });
+
+      // If any upload was successful, invalidate queries
+      if (hasSuccessfulUpload) {
+        await queryClient.invalidateQueries();
+      }
+    } catch (error) {
+      console.error("Error during parallel upload:", error);
+      toast.error("Some files failed to upload. Please check the error messages.");
+    }
+  };
 
   return (
     <Dialog>
@@ -280,6 +313,12 @@ export function DocumentUpload() {
                     <Button variant="outline" size="sm" onClick={clearCompleted}>
                       <Trash2 className="h-4 w-4 mr-2" />
                       Clear Completed
+                    </Button>
+                  )}
+                  {hasFailedFiles && (
+                    <Button variant="outline" size="sm" onClick={retryFailedFiles}>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Retry Failed
                     </Button>
                   )}
                   <Button
